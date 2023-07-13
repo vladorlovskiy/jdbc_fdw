@@ -33,6 +33,8 @@ public class JDBCUtils {
   private StringWriter exceptionStringWriter;
   private PrintWriter exceptionPrintWriter;
   private int queryTimeoutValue;
+  private Integer queryFetchSizeValue;
+  private boolean withStackTrace;
   private Statement tmpStmt;
   private PreparedStatement tmpPstmt;
   private static ConcurrentHashMap<Integer, Connection> ConnectionHash = new ConcurrentHashMap<Integer, Connection>();
@@ -59,13 +61,20 @@ public class JDBCUtils {
     String url = options[1];
     String userName = options[2];
     String password = options[3];
-    String qTimeoutValue = options[4];
+    String qTimeoutOpt = options[4];
     String fileName = options[5];
+    String qFetchSizeOpt = options[6];
+    String qJdbcPropsOpt = options[7];
+    String errorMessageWithStackTraceOpt = options[8];
 
-    queryTimeoutValue = Integer.parseInt(qTimeoutValue);
     exceptionStringWriter = new StringWriter();
     exceptionPrintWriter = new PrintWriter(exceptionStringWriter);
+
     try {
+      queryTimeoutValue = Integer.parseInt(qTimeoutOpt);
+      queryFetchSizeValue = qFetchSizeOpt == null ? null : Integer.parseInt(qFetchSizeOpt);
+      withStackTrace = Boolean.valueOf(errorMessageWithStackTraceOpt);
+
       File JarFile = new File(fileName);
       String jarfile_path = JarFile.toURI().toURL().toString();
       if (jdbcDriverLoader == null) {
@@ -77,8 +86,11 @@ public class JDBCUtils {
       jdbcDriverClass = jdbcDriverLoader.loadClass(driverClassName);
       jdbcDriver = (Driver) jdbcDriverClass.newInstance();
       jdbcProperties = new Properties();
-      jdbcProperties.put("user", userName);
-      jdbcProperties.put("password", password);
+      if (qJdbcPropsOpt != null) {
+        jdbcProperties.loadFromXML(new ByteArrayInputStream(qJdbcPropsOpt.getBytes()));
+      }
+      if (userName != null) jdbcProperties.put("user", userName);
+      if (password != null) jdbcProperties.put("password", password);
       /* get connection from cache */
       if (ConnectionHash.containsKey(key)) {
         conn = ConnectionHash.get(key);
@@ -89,6 +101,10 @@ public class JDBCUtils {
       }
       dbMetadata = conn.getMetaData();
     } catch (Throwable e) {
+      if (withStackTrace) {
+        e.printStackTrace(exceptionPrintWriter);
+        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      }
       throw e;
     }
   }
@@ -109,8 +125,15 @@ public class JDBCUtils {
       if (queryTimeoutValue != 0) {
         tmpStmt.setQueryTimeout(queryTimeoutValue);
       }
+      if (queryFetchSizeValue != null) {
+        tmpStmt.setFetchSize(queryFetchSizeValue);
+      }
       tmpStmt.executeQuery(query);
     } catch (Throwable e) {
+      if (withStackTrace) {
+        e.printStackTrace(exceptionPrintWriter);
+        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      }
       throw e;
     }
   }
@@ -134,6 +157,9 @@ public class JDBCUtils {
       if (queryTimeoutValue != 0) {
         tmpStmt.setQueryTimeout(queryTimeoutValue);
       }
+      if (queryFetchSizeValue != null) {
+        tmpStmt.setFetchSize(queryFetchSizeValue);
+      }
       tmpResultSet = tmpStmt.executeQuery(query);
       rSetMetadata = tmpResultSet.getMetaData();
       tmpNumberOfColumns = rSetMetadata.getColumnCount();
@@ -144,6 +170,10 @@ public class JDBCUtils {
               tmpResultSet, tmpNumberOfColumns, tmpNumberOfAffectedRows, null));
       return tmpResultSetKey;
     } catch (Throwable e) {
+      if (withStackTrace) {
+        e.printStackTrace(exceptionPrintWriter);
+        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      }
       throw e;
     }
   }
@@ -157,6 +187,10 @@ public class JDBCUtils {
       checkConnExist();
       resultSetInfoMap.remove(resultSetID);
     } catch (Throwable e) {
+      if (withStackTrace) {
+        e.printStackTrace(exceptionPrintWriter);
+        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      }
       throw e;
     }
   }
@@ -175,10 +209,17 @@ public class JDBCUtils {
       if (queryTimeoutValue != 0) {
         tmpPstmt.setQueryTimeout(queryTimeoutValue);
       }
+      if (queryFetchSizeValue != null) {
+        tmpStmt.setFetchSize(queryFetchSizeValue);
+      }
       int tmpResultSetKey = initResultSetKey();
       resultSetInfoMap.put(tmpResultSetKey, new resultSetInfo(null, null, 0, tmpPstmt));
       return tmpResultSetKey;
     } catch (Throwable e) {
+      if (withStackTrace) {
+        e.printStackTrace(exceptionPrintWriter);
+        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      }
       throw e;
     }
   }
@@ -198,6 +239,10 @@ public class JDBCUtils {
       resultSetInfoMap.get(resultSetID).setPstmt(tmpPstmt);
       resultSetInfoMap.get(resultSetID).setNumberOfAffectedRows(tmpNumberOfAffectedRows);
     } catch (Throwable e) {
+      if (withStackTrace) {
+        e.printStackTrace(exceptionPrintWriter);
+        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      }
       throw e;
     }
   }
@@ -212,6 +257,10 @@ public class JDBCUtils {
     try {
       return resultSetInfoMap.get(resultSetID).getNumberOfColumns();
     } catch (Throwable e) {
+      if (withStackTrace) {
+        e.printStackTrace(exceptionPrintWriter);
+        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      }
       throw e;
     }
   }
@@ -226,6 +275,10 @@ public class JDBCUtils {
     try {
       return resultSetInfoMap.get(resultSetID).getNumberOfAffectedRows();
     } catch (Throwable e) {
+      if (withStackTrace) {
+        e.printStackTrace(exceptionPrintWriter);
+        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      }
       throw e;
     }
   }
@@ -295,6 +348,10 @@ public class JDBCUtils {
         return null;
       }
     } catch (Throwable e) {
+      if (withStackTrace) {
+        e.printStackTrace(exceptionPrintWriter);
+        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      }
       throw e;
     }
   }
@@ -410,6 +467,10 @@ public class JDBCUtils {
       }
       return tmpColumnTypesList;
     } catch (Throwable e) {
+      if (withStackTrace) {
+        e.printStackTrace(exceptionPrintWriter);
+        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      }
       throw e;
     }
   }
@@ -432,6 +493,10 @@ public class JDBCUtils {
       }
       return tmpColumnNames;
     } catch (Throwable e) {
+      if (withStackTrace) {
+        e.printStackTrace(exceptionPrintWriter);
+        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      }
       throw e;
     }
   }
@@ -456,6 +521,10 @@ public class JDBCUtils {
       }
       return tmpTableNames;
     } catch (Throwable e) {
+      if (withStackTrace) {
+        e.printStackTrace(exceptionPrintWriter);
+        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      }
       throw e;
     }
   }
@@ -481,6 +550,10 @@ public class JDBCUtils {
       }
       return tmpColumnNames;
     } catch (Throwable e) {
+      if (withStackTrace) {
+        e.printStackTrace(exceptionPrintWriter);
+        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      }
       throw e;
     }
   }
@@ -556,6 +629,10 @@ public class JDBCUtils {
       }
       return tmpColumnTypes;
     } catch (Throwable e) {
+      if (withStackTrace) {
+        e.printStackTrace(exceptionPrintWriter);
+        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      }
       throw e;
     }
   }
@@ -580,6 +657,10 @@ public class JDBCUtils {
       }
       return tmpPrimaryKey;
     } catch (Throwable e) {
+      if (withStackTrace) {
+        e.printStackTrace(exceptionPrintWriter);
+        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      }
       throw e;
     }
   }
@@ -602,6 +683,10 @@ public class JDBCUtils {
         tmpPstmt = null;
       }
     } catch (Throwable e) {
+      if (withStackTrace) {
+        e.printStackTrace(exceptionPrintWriter);
+        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      }
       throw e;
     }
   }
@@ -618,6 +703,10 @@ public class JDBCUtils {
         conn = null;
       }
     } catch (Throwable e) {
+      if (withStackTrace) {
+        e.printStackTrace(exceptionPrintWriter);
+        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      }
       throw e;
     }
   }
@@ -631,6 +720,10 @@ public class JDBCUtils {
     try {
       closeStatement();
     } catch (Throwable e) {
+      if (withStackTrace) {
+        e.printStackTrace(exceptionPrintWriter);
+        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      }
       throw e;
     }
   }
@@ -672,6 +765,10 @@ public class JDBCUtils {
       tmpPstmt.setNull(attnum, Types.NULL);
       resultSetInfoMap.get(resultSetID).setPstmt(tmpPstmt);
     } catch (Throwable e) {
+      if (withStackTrace) {
+        e.printStackTrace(exceptionPrintWriter);
+        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      }
       throw e;
     }
   }
@@ -690,6 +787,10 @@ public class JDBCUtils {
       tmpPstmt.setInt(attnum, values);
       resultSetInfoMap.get(resultSetID).setPstmt(tmpPstmt);
     } catch (Throwable e) {
+      if (withStackTrace) {
+        e.printStackTrace(exceptionPrintWriter);
+        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      }
       throw e;
     }
   }
@@ -708,6 +809,10 @@ public class JDBCUtils {
       tmpPstmt.setLong(attnum, values);
       resultSetInfoMap.get(resultSetID).setPstmt(tmpPstmt);
     } catch (Throwable e) {
+      if (withStackTrace) {
+        e.printStackTrace(exceptionPrintWriter);
+        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      }
       throw e;
     }
   }
@@ -726,6 +831,10 @@ public class JDBCUtils {
       tmpPstmt.setFloat(attnum, values);
       resultSetInfoMap.get(resultSetID).setPstmt(tmpPstmt);
     } catch (Throwable e) {
+      if (withStackTrace) {
+        e.printStackTrace(exceptionPrintWriter);
+        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      }
       throw e;
     }
   }
@@ -744,6 +853,10 @@ public class JDBCUtils {
       tmpPstmt.setDouble(attnum, values);
       resultSetInfoMap.get(resultSetID).setPstmt(tmpPstmt);
     } catch (Throwable e) {
+      if (withStackTrace) {
+        e.printStackTrace(exceptionPrintWriter);
+        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      }
       throw e;
     }
   }
@@ -762,6 +875,10 @@ public class JDBCUtils {
       tmpPstmt.setBoolean(attnum, values);
       resultSetInfoMap.get(resultSetID).setPstmt(tmpPstmt);
     } catch (Throwable e) {
+      if (withStackTrace) {
+        e.printStackTrace(exceptionPrintWriter);
+        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      }
       throw e;
     }
   }
@@ -780,6 +897,10 @@ public class JDBCUtils {
       tmpPstmt.setString(attnum, values);
       resultSetInfoMap.get(resultSetID).setPstmt(tmpPstmt);
     } catch (Throwable e) {
+      if (withStackTrace) {
+        e.printStackTrace(exceptionPrintWriter);
+        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      }
       throw e;
     }
   }
@@ -799,6 +920,10 @@ public class JDBCUtils {
       tmpPstmt.setBinaryStream(attnum, targetStream, length);
       resultSetInfoMap.get(resultSetID).setPstmt(tmpPstmt);
     } catch (Throwable e) {
+      if (withStackTrace) {
+        e.printStackTrace(exceptionPrintWriter);
+        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      }
       throw e;
     }
   }
@@ -819,6 +944,10 @@ public class JDBCUtils {
       tmpPstmt.setObject(attnum, localTime);
       resultSetInfoMap.get(resultSetID).setPstmt(tmpPstmt);
     } catch (Throwable e) {
+      if (withStackTrace) {
+        e.printStackTrace(exceptionPrintWriter);
+        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      }
       throw e;
     }
   }
@@ -841,6 +970,10 @@ public class JDBCUtils {
       tmpPstmt.setObject(attnum, localTime);
       resultSetInfoMap.get(resultSetID).setPstmt(tmpPstmt);
     } catch (Throwable e) {
+      if (withStackTrace) {
+        e.printStackTrace(exceptionPrintWriter);
+        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      }
       throw e;
     }
   }
@@ -860,6 +993,10 @@ public class JDBCUtils {
         /* GridDB only, no calendar support in setTimestamp() */
         preparedStatement.setTimestamp(attnum, timestamp);
       } catch (Throwable e) {
+        if (withStackTrace) {
+          e.printStackTrace(exceptionPrintWriter);
+          throw new RuntimeException(exceptionStringWriter.toString(), e);
+        }
         throw e;
       }
     }
@@ -879,6 +1016,10 @@ public class JDBCUtils {
       setTimestamp(tmpPstmt, attnum, timestamp);
       resultSetInfoMap.get(resultSetID).setPstmt(tmpPstmt);
     } catch (Throwable e) {
+      if (withStackTrace) {
+        e.printStackTrace(exceptionPrintWriter);
+        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      }
       throw e;
     }
   }
@@ -902,6 +1043,10 @@ public class JDBCUtils {
       }
       return this.resultSetKey;
     } catch (Throwable e) {
+      if (withStackTrace) {
+        e.printStackTrace(exceptionPrintWriter);
+        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      }
       throw e;
     }
   }
@@ -915,6 +1060,10 @@ public class JDBCUtils {
       DatabaseMetaData md = conn.getMetaData();
       return md.getIdentifierQuoteString();
     } catch (Throwable e) {
+      if (withStackTrace) {
+        e.printStackTrace(exceptionPrintWriter);
+        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      }
       throw e;
     }
   }

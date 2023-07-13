@@ -177,6 +177,9 @@ init_jdbcfdw_options(void)
 		{"key", AttributeRelationId, false},
 		{"column_name", AttributeRelationId, false},
 		{"use_remote_estimate", ForeignTableRelationId, false},
+		{"fetchsize", ForeignTableRelationId, false},
+		{"jdbcprops", ForeignServerRelationId, false},
+		{"errorwithstacktrace", ForeignServerRelationId, false},
 		{NULL, InvalidOid, false}
 	};
 

@@ -68,6 +68,9 @@ typedef struct JserverOptions
 	int			querytimeout;
 	char	   *jarfile;
 	int			maxheapsize;
+	char	   *errorwithstacktrace;
+	char  	   *fetchsize;
+	char	   *jdbcprops;
 }			JserverOptions;
 
 static JserverOptions opts;
@@ -377,7 +380,7 @@ static Jconn *
 jdbc_create_JDBC_connection(const ForeignServer * server, const UserMapping * user)
 {
 	jmethodID	idCreate;
-	jstring		stringArray[6];
+	jstring		stringArray[9];
 	jclass		javaString;
 	jobjectArray argArray;
 	jclass		JDBCUtilsClass;
@@ -429,6 +432,9 @@ jdbc_create_JDBC_connection(const ForeignServer * server, const UserMapping * us
 	stringArray[3] = (*Jenv)->NewStringUTF(Jenv, opts.password);
 	stringArray[4] = (*Jenv)->NewStringUTF(Jenv, querytimeout_string);
 	stringArray[5] = (*Jenv)->NewStringUTF(Jenv, opts.jarfile);
+	stringArray[6] = (*Jenv)->NewStringUTF(Jenv, opts.fetchsize);
+	stringArray[7] = (*Jenv)->NewStringUTF(Jenv, opts.jdbcprops);
+	stringArray[8] = (*Jenv)->NewStringUTF(Jenv, opts.errorwithstacktrace);
 	/* Set up the return value */
 	javaString = (*Jenv)->FindClass(Jenv, "java/lang/String");
 	argArray = (*Jenv)->NewObjectArray(Jenv, numParams, javaString, stringArray[0]);
@@ -525,6 +531,18 @@ jdbc_get_server_options(JserverOptions * opts, const ForeignServer * f_server, c
 		if (strcmp(def->defname, "url") == 0)
 		{
 			opts->url = defGetString(def);
+		}
+		if (strcmp(def->defname, "jdbcprops") == 0)
+		{
+			opts->jdbcprops = defGetString(def);
+		}
+		if (strcmp(def->defname, "errorwithstacktrace") == 0)
+		{
+			opts->errorwithstacktrace = defGetString(def);
+		}
+		if (strcmp(def->defname, "fetchsize") == 0)
+		{
+			opts->fetchsize = defGetString(def);
 		}
 	}
 }
@@ -1408,8 +1426,8 @@ jq_get_exception()
 		exceptionMsg = (jstring) (*Jenv)->CallObjectMethod(Jenv, exc, exceptionMsgID);
 		exceptionString = jdbc_convert_string_to_cstring((jobject) exceptionMsg);
 		err_msg = pstrdup(exceptionString);
-		ereport(ERROR, (errmsg("remote server returned an error")));
-		ereport(DEBUG3, (errmsg("%s", err_msg)));
+		ereport(ERROR, (errmsg("remote server returned an error: %s", err_msg)));
+		// ereport(DEBUG3, (errmsg("%s", err_msg)));
 	}
 	return;
 }
