@@ -80,4 +80,16 @@ extern void *jq_bind_sql_var(Jconn * conn, Oid type, int attnum, Datum value, bo
 extern Datum jdbc_convert_to_pg(Oid pgtyp, int pgtypmod, char *value);
 extern List * jq_get_schema_info(Jconn * conn);
 extern void jdbc_jvm_init(const ForeignServer * server, const UserMapping * user);
+extern Jresult * jq_get_tables(Jconn *conn,
+	const char *catalog,
+	const char *schemapattern,
+	const char *tablepattern,
+	const char *tabletypes,
+	int *resultSetID);
+extern Jresult * jq_get_columns(Jconn *conn,
+	const char *catalog,
+	const char *schemapattern,
+	const char *tablepattern,
+	const char *columnpattern,
+	int *resultSetID);
 #endif							/* JQ_H */

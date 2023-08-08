@@ -1786,3 +1786,210 @@ jq_get_JDBCUtils(Jconn *conn, jclass *JDBCUtilsClass, jobject *JDBCUtilsObject)
 		ereport(ERROR, (errmsg("JDBCUtils class could not be created")));
 	}
 }
+
+/*
+ * jq_get_tables: calls conn.getMetaData().getTables(catalog, schemapattern, tablepattern, tabletypecsv)
+ */
+Jresult *
+jq_get_tables(Jconn *conn,
+	const char *catalog,
+	const char *schemapattern,
+	const char *tablepattern,
+	const char *tabletypecsv,
+	int *resultSetID)
+{
+	jmethodID	idGetTables;
+	jstring		jcatalog = NULL;
+	jstring     jschemapattern = NULL;
+	jstring     jtablepattern = NULL;
+	jstring     jtabletypecsv = NULL;
+	jclass		JDBCUtilsClass;
+	jobject		JDBCUtilsObject;
+	Jresult    *res;
+
+	ereport(DEBUG3,
+		(errmsg("In jq_get_tables(%p): %s, %s, %s, (%s)",
+		conn, catalog, schemapattern, tablepattern, tabletypecsv)));
+
+	elog(WARNING,"In jq_get_tables(%p): %s, %s, %s, (%s)",
+		conn, catalog, schemapattern, tablepattern, tabletypecsv);
+
+	jq_get_JDBCUtils(conn, &JDBCUtilsClass, &JDBCUtilsObject);
+
+	res = (Jresult *) palloc0(sizeof(Jresult));
+	*res = PGRES_FATAL_ERROR;
+
+	idGetTables = (*Jenv)->GetMethodID(
+		Jenv,
+		JDBCUtilsClass,
+		"getTables",
+		"(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)I");
+	if (idGetTables == NULL)
+	{
+		ereport(ERROR, (errmsg("Failed to find the JDBCUtils.getTables method!")));
+	}
+	/* arguments */
+	if (catalog)
+	{
+		jcatalog = (*Jenv)->NewStringUTF(Jenv, catalog);
+		if (jcatalog == NULL)
+		{
+			ereport(ERROR, (errmsg("Failed to create catalog argument")));
+		}
+	}
+	if (schemapattern)
+	{
+		jschemapattern = (*Jenv)->NewStringUTF(Jenv, schemapattern);
+		if (jschemapattern == NULL)
+		{
+			ereport(ERROR, (errmsg("Failed to create schemapattern argument")));
+		}
+	}
+	if (tablepattern)
+	{
+		jtablepattern = (*Jenv)->NewStringUTF(Jenv, tablepattern);
+		if (jtablepattern == NULL)
+		{
+			ereport(ERROR, (errmsg("Failed to create tablepattern argument")));
+		}
+	}
+	if (tabletypecsv)
+	{
+		jtabletypecsv = (*Jenv)->NewStringUTF(Jenv, tabletypecsv);
+		if (jtabletypecsv == NULL)
+		{
+			ereport(ERROR, (errmsg("Failed to create tabletypecsv argument")));
+		}
+	}
+	jq_exception_clear();
+	*resultSetID = (int) (*Jenv)->CallIntMethod(
+			Jenv,
+			conn->JDBCUtilsObject,
+			idGetTables,
+			jcatalog,
+			jschemapattern,
+			jtablepattern,
+			jtabletypecsv
+			);
+	jq_get_exception();
+	if (*resultSetID < 0)
+	{
+		/* Return Java memory */
+		if (jcatalog) (*Jenv)->DeleteLocalRef(Jenv, jcatalog);
+		if (jschemapattern) (*Jenv)->DeleteLocalRef(Jenv, jschemapattern);
+		if (jtablepattern) (*Jenv)->DeleteLocalRef(Jenv, jtablepattern);
+		if (jtabletypecsv) (*Jenv)->DeleteLocalRef(Jenv, jtabletypecsv);
+		ereport(ERROR, (errmsg("Get resultSetID failed with code: %d", *resultSetID)));
+	}
+	ereport(DEBUG3, (errmsg("Get resultSetID successfully, ID: %d", *resultSetID)));
+
+	/* Return Java memory */
+	if (jcatalog) (*Jenv)->DeleteLocalRef(Jenv, jcatalog);
+	if (jschemapattern) (*Jenv)->DeleteLocalRef(Jenv, jschemapattern);
+	if (jtablepattern) (*Jenv)->DeleteLocalRef(Jenv, jtablepattern);
+	if (jtabletypecsv) (*Jenv)->DeleteLocalRef(Jenv, jtabletypecsv);
+	*res = PGRES_COMMAND_OK;
+	return res;
+}
+
+/*
+ * jq_get_columns: calls conn.getMetaData().getColumns(catalog, schemapattern, tablepattern, columnpattern)
+ */
+
+Jresult *
+jq_get_columns(Jconn *conn,
+	const char *catalog,
+	const char *schemapattern,
+	const char *tablepattern,
+	const char *columnpattern,
+	int *resultSetID)
+{
+	jmethodID	idGetColumns;
+	jstring		jcatalog = NULL;
+	jstring     jschemapattern = NULL;
+	jstring     jtablepattern = NULL;
+	jstring     jcolumnpattern = NULL;
+	jclass		JDBCUtilsClass;
+	jobject		JDBCUtilsObject;
+	Jresult    *res;
+
+	ereport(DEBUG3, (errmsg("In jq_get_columns(%p): %s, %s, %s, %s",
+		conn, catalog, schemapattern, tablepattern, columnpattern )));
+
+	jq_get_JDBCUtils(conn, &JDBCUtilsClass, &JDBCUtilsObject);
+
+	res = (Jresult *) palloc0(sizeof(Jresult));
+	*res = PGRES_FATAL_ERROR;
+
+	idGetColumns = (*Jenv)->GetMethodID(
+		Jenv,
+		JDBCUtilsClass,
+		"getColumns",
+		"(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)I");
+	if (idGetColumns == NULL)
+	{
+		ereport(ERROR, (errmsg("Failed to find the JDBCUtils.getColumns method!")));
+	}
+	/* arguments */
+	if(catalog)
+	{
+		jcatalog = (*Jenv)->NewStringUTF(Jenv, catalog);
+		if (jcatalog == NULL)
+		{
+			ereport(ERROR, (errmsg("Failed to create catalog argument")));
+		}
+	}
+	if (schemapattern)
+	{
+		jschemapattern = (*Jenv)->NewStringUTF(Jenv, schemapattern);
+		if (jschemapattern == NULL)
+		{
+			ereport(ERROR, (errmsg("Failed to create schemapattern argument")));
+		}
+	}
+	if (tablepattern)
+	{
+		jtablepattern = (*Jenv)->NewStringUTF(Jenv, tablepattern);
+		if (jtablepattern == NULL)
+		{
+			ereport(ERROR, (errmsg("Failed to create tablepattern argument")));
+		}
+	}
+	if (columnpattern)
+	{
+		jcolumnpattern = (*Jenv)->NewStringUTF(Jenv, columnpattern);
+		if (jcolumnpattern == NULL)
+		{
+			ereport(ERROR, (errmsg("Failed to create columnpattern argument")));
+		}
+	}
+	jq_exception_clear();
+	*resultSetID = (int) (*Jenv)->CallIntMethod(
+			Jenv,
+			conn->JDBCUtilsObject,
+			idGetColumns,
+			jcatalog,
+			jschemapattern,
+			jtablepattern,
+			jcolumnpattern
+			);
+	jq_get_exception();
+	if (*resultSetID < 0)
+	{
+		/* Return Java memory */
+		if (jcatalog) (*Jenv)->DeleteLocalRef(Jenv, jcatalog);
+		if (jschemapattern) (*Jenv)->DeleteLocalRef(Jenv, jschemapattern);
+		if (jtablepattern) (*Jenv)->DeleteLocalRef(Jenv, jtablepattern);
+		if (jcolumnpattern) (*Jenv)->DeleteLocalRef(Jenv, jcolumnpattern);
+		ereport(ERROR, (errmsg("Get resultSetID failed with code: %d", *resultSetID)));
+	}
+	ereport(DEBUG3, (errmsg("Get resultSetID successfully, ID: %d", *resultSetID)));
+
+	/* Return Java memory */
+	if (jcatalog) (*Jenv)->DeleteLocalRef(Jenv, jcatalog);
+	if (jschemapattern) (*Jenv)->DeleteLocalRef(Jenv, jschemapattern);
+	if (jtablepattern) (*Jenv)->DeleteLocalRef(Jenv, jtablepattern);
+	if (jcolumnpattern) (*Jenv)->DeleteLocalRef(Jenv, jcolumnpattern);
+	*res = PGRES_COMMAND_OK;
+	return res;
+}
