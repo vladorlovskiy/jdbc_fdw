@@ -148,7 +148,6 @@ public class JDBCUtils {
   public int createStatementID(String query) throws Exception {
     ResultSet tmpResultSet;
     int tmpNumberOfColumns;
-    int tmpNumberOfAffectedRows = 0;
     ResultSetMetaData rSetMetadata;
     int tmpResultSetKey;
     try {
@@ -166,8 +165,7 @@ public class JDBCUtils {
       tmpResultSetKey = initResultSetKey();
       resultSetInfoMap.put(
           tmpResultSetKey,
-          new resultSetInfo(
-              tmpResultSet, tmpNumberOfColumns, tmpNumberOfAffectedRows, null));
+          new resultSetInfo(tmpResultSet, tmpNumberOfColumns));
       return tmpResultSetKey;
     } catch (Throwable e) {
       if (withStackTrace) {
@@ -213,7 +211,7 @@ public class JDBCUtils {
         tmpStmt.setFetchSize(queryFetchSizeValue);
       }
       int tmpResultSetKey = initResultSetKey();
-      resultSetInfoMap.put(tmpResultSetKey, new resultSetInfo(null, null, 0, tmpPstmt));
+      resultSetInfoMap.put(tmpResultSetKey, new resultSetInfo(0, tmpPstmt));
       return tmpResultSetKey;
     } catch (Throwable e) {
       if (withStackTrace) {
@@ -298,12 +296,21 @@ public class JDBCUtils {
       int tmpNumberOfColumns = resultSetInfoMap.get(resultSetID).getNumberOfColumns();
       Object[] tmpArrayOfResultRow = new Object[tmpNumberOfColumns];
       ResultSetMetaData mtData = tmpResultSet.getMetaData();
+      List<Map.Entry<String,String>> info = resultSetInfoMap.get(resultSetID).getColumnInfo();
+      boolean silent = info != null;
 
       /* Row-by-row processing is done in jdbc_fdw.One row
        * at a time is returned to the C code. */
       if (tmpResultSet.next()) {
         for (i = 0; i < tmpNumberOfColumns; i++) {
-          int columnType = mtData.getColumnType(i + 1);
+          int columnType;
+          try{
+            columnType = mtData.getColumnType(i + 1);
+          } catch (Throwable e){
+            if (!silent) throw e;
+            tmpArrayOfResultRow[i] = null;
+            continue;
+          }
 
           switch (columnType) {
             case Types.BINARY:
@@ -365,11 +372,16 @@ public class JDBCUtils {
     try {
       ResultSet tmpResultSet = resultSetInfoMap.get(resultSetID).getResultSet();
       ResultSetMetaData resultSetMetaData = tmpResultSet.getMetaData();
-      int columnNumber = resultSetMetaData.getColumnCount();
+      int columnNumber = resultSetInfoMap.get(resultSetID).getNumberOfColumns();
       String[] tmpColumnTypesList = new String[columnNumber];
+      List<Map.Entry<String,String>> info = resultSetInfoMap.get(resultSetID).getColumnInfo();
 
       for (i = 0; i < columnNumber; i++)
       {
+        if (info != null && info.get(i) != null) {
+          tmpColumnTypesList[i] = info.get(i).getValue();
+          continue;
+        }
         /* Column's index start from 1, so param of getColumnTypeName is (i + 1)  */
         int columnType = resultSetMetaData.getColumnType(i + 1);
         switch (columnType) {
@@ -483,12 +495,16 @@ public class JDBCUtils {
     try {
       ResultSet tmpResultSet = resultSetInfoMap.get(resultSetID).getResultSet();
       ResultSetMetaData resultSetMetaData = tmpResultSet.getMetaData();
-      int columnNumber = resultSetMetaData.getColumnCount();
+      int columnNumber = resultSetInfoMap.get(resultSetID).getNumberOfColumns();
       String[] tmpColumnNames = new String[columnNumber];
+      List<Map.Entry<String,String>> info = resultSetInfoMap.get(resultSetID).getColumnInfo();
 
       for (int i = 0; i < columnNumber; i++)
       {
-        /* Column's index start from 1, so param of getColumnName is (i + 1)  */
+        if (info != null && info.get(i) != null) {
+          tmpColumnNames[i] = info.get(i).getKey();
+          continue;
+        }
         tmpColumnNames[i] = resultSetMetaData.getColumnName(i + 1);
       }
       return tmpColumnNames;
@@ -502,6 +518,103 @@ public class JDBCUtils {
   }
 
   /*
+   * getTables
+   *   Returns the ResultSetId of calling conn.getMetaData().getTables(catalog, schemapattern, tablepattern, tabletype[])
+   */
+  public int getTables(String catalog, String schemaPattern, String tableNamePattern, String tableTypes) throws Throwable {
+    // ResultSet columns are prefefined by JavaDoc. Some jdbc drivers do not implement the list fully
+    // https://docs.oracle.com/en/java/javase/20/docs/api//java.sql/java/sql/DatabaseMetaData.html
+    // The list of columns has to match with the result declaration of result of the jdbc_get_tables postgres function
+    List<Map.Entry<String,String>> predefinedColumnInfo = List.of(
+                Map.entry("TABLE_CAT", "text"),
+                Map.entry("TABLE_SCHEM", "text"),
+                Map.entry("TABLE_NAME", "text"),
+                Map.entry("TABLE_TYPE", "text"),
+                Map.entry("REMARKS", "text"),
+                Map.entry("TYPE_CAT", "text"),
+                Map.entry("TYPE_SCHEM", "text"),
+                Map.entry("TYPE_NAME", "text"),
+                Map.entry("SELF_REFERENCING_COL_NAME", "text"),
+                Map.entry("REF_GENERATION", "text")
+          );
+    try {
+      checkConnExist();
+      DatabaseMetaData md = conn.getMetaData();
+      int tmpResultSetKey = initResultSetKey();
+      resultSetInfoMap.put(
+          tmpResultSetKey,
+          new resultSetInfo(
+              md.getTables(catalog, schemaPattern, tableNamePattern, tableTypes == null ? null : tableTypes.split(",")),
+              predefinedColumnInfo
+          )
+        );
+      return tmpResultSetKey;
+    } catch (Throwable e) {
+      if (withStackTrace) {
+        e.printStackTrace(exceptionPrintWriter);
+        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      }
+      throw e;
+    }
+  }
+
+   /*
+   * getTables
+   *   Returns the ResultSetId of calling conn.getMetaData().getColumns(catalog, schemapattern, tablepattern, columnpattern)
+   */
+  public int getColumns(String catalog, String schemaPattern, String tableNamePattern, String columnNamePattern) throws Throwable {
+    // ResultSet columns are prefefined by JavaDoc. Some jdbc drivers do not implement the list fully
+    // https://docs.oracle.com/en/java/javase/20/docs/api//java.sql/java/sql/DatabaseMetaData.html
+    // The list of columns has to match with the result declaration of result of the jdbc_get_column postgres function
+    List<Map.Entry<String,String>> predefinedColumnInfo = List.of(
+            Map.entry("TABLE_CAT", "text"),
+            Map.entry("TABLE_SCHEM", "text"),
+            Map.entry("TABLE_NAME", "text"),
+            Map.entry("COLUMN_NAME", "text"),
+            Map.entry("DATA_TYPE", "int"),
+            Map.entry("TYPE_NAME", "text"),
+            Map.entry("COLUMN_SIZE", "int"),
+            Map.entry("BUFFER_LENGTH", "int"),
+            Map.entry("DECIMAL_DIGITS", "int"),
+            Map.entry("NUM_PREC_RADIX", "int"),
+            Map.entry("NULLABLE", "int"),
+            Map.entry("REMARKS", "text"),
+            Map.entry("COLUMN_DEF", "text"),
+            Map.entry("SQL_DATA_TYPE", "int"),
+            Map.entry("SQL_DATETIME_SUB", "int"),
+            Map.entry("CHAR_OCTET_LENGTH", "int"),
+            Map.entry("ORDINAL_POSITION", "int"),
+            Map.entry("IS_NULLABLE", "text"),
+            Map.entry("SCOPE_CATLOG", "text"),
+            Map.entry("SCOPE_SCHEMA", "text"),
+            Map.entry("SCOPE_TABLE", "text"),
+            Map.entry("SOURCE_DATA_TYPE", "int"),
+            Map.entry("IS_AUTOINCREMENT", "text"),
+            Map.entry("IS_GENERATEDCOLUMN", "text")
+      );
+    try {
+      checkConnExist();
+      DatabaseMetaData md = conn.getMetaData();
+      int tmpResultSetKey = initResultSetKey();
+      resultSetInfoMap.put(
+          tmpResultSetKey,
+          new resultSetInfo(
+              md.getColumns(catalog, schemaPattern, tableNamePattern, columnNamePattern),
+              predefinedColumnInfo
+            )
+        );
+      return tmpResultSetKey;
+    } catch (Throwable e) {
+      if (withStackTrace) {
+        e.printStackTrace(exceptionPrintWriter);
+        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      }
+      throw e;
+    }
+  }
+
+
+  /*
    * getTableNames
    *      Returns the column name
    */
@@ -510,7 +623,6 @@ public class JDBCUtils {
       checkConnExist();
       DatabaseMetaData md = conn.getMetaData();
       ResultSet tmpResultSet = md.getTables(null, null, "%", null);
-
       List<String> tmpTableNamesList = new ArrayList<String>();
       while (tmpResultSet.next()) {
         tmpTableNamesList.add(tmpResultSet.getString(3));
@@ -534,12 +646,10 @@ public class JDBCUtils {
    *      Returns the column name
    */
   public String[] getColumnNames(String tableName) throws SQLException {
-    int rowCount;
     try {
       checkConnExist();
       DatabaseMetaData md = conn.getMetaData();
       ResultSet tmpResultSet = md.getColumns(null, null, tableName, null);
-      ResultSetMetaData rSetMetadata = tmpResultSet.getMetaData();
       List<String> tmpColumnNamesList = new ArrayList<String>();
       while (tmpResultSet.next()) {
         tmpColumnNamesList.add(tmpResultSet.getString("COLUMN_NAME"));
@@ -563,12 +673,10 @@ public class JDBCUtils {
    *      Returns the column name
    */
   public String[] getColumnTypes(String tableName) throws SQLException {
-    int rowCount;
     try {
       checkConnExist();
       DatabaseMetaData md = conn.getMetaData();
       ResultSet tmpResultSet = md.getColumns(null, null, tableName, null);
-      ResultSetMetaData rSetMetadata = tmpResultSet.getMetaData();
       List<String> tmpColumnTypesList = new ArrayList<String>();
       while (tmpResultSet.next()) {
         tmpColumnTypesList.add(tmpResultSet.getString("TYPE_NAME"));
@@ -646,7 +754,6 @@ public class JDBCUtils {
       checkConnExist();
       DatabaseMetaData md = conn.getMetaData();
       ResultSet tmpResultSet = md.getPrimaryKeys(null, null, tableName);
-      ResultSetMetaData rSetMetadata = tmpResultSet.getMetaData();
       List<String> tmpPrimaryKeyList = new ArrayList<String>();
       while (tmpResultSet.next()) {
         tmpPrimaryKeyList.add(tmpResultSet.getString("COLUMN_NAME"));

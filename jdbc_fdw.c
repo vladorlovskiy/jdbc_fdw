@@ -236,6 +236,9 @@ typedef struct ConversionLocation
 PG_FUNCTION_INFO_V1(jdbc_fdw_handler);
 PG_FUNCTION_INFO_V1(jdbc_fdw_version);
 PG_FUNCTION_INFO_V1(jdbc_exec);
+PG_FUNCTION_INFO_V1(jdbc_get_tables);
+PG_FUNCTION_INFO_V1(jdbc_get_columns);
+
 /*
  * FDW callback routines
  */
@@ -3133,3 +3136,164 @@ jdbc_execute_commands(List *cmd_list)
 	if (SPI_finish() != SPI_OK_FINISH)
 		elog(WARNING, "SPI_finish failed");
 }
+
+
+/*
+ * jq_get_tables: calls conn.getMetaData().getTables(catalog, schemapattern, tablepattern, tabletypecsv)
+ */
+Datum
+jdbc_get_tables(PG_FUNCTION_ARGS)
+{
+	Jconn	*conn		    = NULL;
+	char	*servername	    = NULL;
+	char    *catalog        = NULL;
+	char    *schemapattern  = NULL;
+	char    *tablepattern   = NULL;
+	char    *tabletypecsv   = NULL;
+
+	Jresult *volatile res	= NULL;
+	int resultSetID 		= 0;
+
+	TupleDesc	tupleDescriptor;
+
+	PG_TRY();
+	{
+		if (PG_NARGS() == 5)
+		{
+			servername = text_to_cstring(PG_GETARG_TEXT_PP(0));
+			catalog = PG_ARGISNULL(1) ? NULL : text_to_cstring(PG_GETARG_TEXT_PP(1));
+			schemapattern = PG_ARGISNULL(2) ? NULL : text_to_cstring(PG_GETARG_TEXT_PP(2));
+			tablepattern = PG_ARGISNULL(3) ? NULL : text_to_cstring(PG_GETARG_TEXT_PP(3));
+			tabletypecsv = PG_ARGISNULL(4) ? NULL : text_to_cstring(PG_GETARG_TEXT_PP(4));
+			conn = jdbc_get_conn_by_server_name(servername);
+		}
+		else
+		{
+			/* shouldn't happen */
+			elog(ERROR, "jdbc_fdw: wrong number of arguments");
+		}
+
+		if (!conn)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_CONNECTION_DOES_NOT_EXIST),
+					 errmsg("jdbc_fdw: server \"%s\" not available", servername)));
+		}
+
+		prepTuplestoreResult(fcinfo);
+
+		/* Execute getTables jdbc method */
+		res = jq_get_tables(conn, catalog, schemapattern, tablepattern, tabletypecsv, &resultSetID);
+
+		if (*res != PGRES_COMMAND_OK) {
+		    elog(ERROR, "jdbc_fdw: getTables \"%s\",\"%s\",\"%s\",\"%s\" call failed",
+					catalog, schemapattern, tablepattern, tabletypecsv);
+			jdbc_fdw_report_error(ERROR, res, conn, false, "JDBC::getMetadata()::getTables");
+		}
+
+		/* Create temp descriptor */
+		tupleDescriptor = jdbc_create_descriptor(conn, &resultSetID);
+
+		jq_iterate_all_row(fcinfo, conn, tupleDescriptor, resultSetID);
+	}
+	PG_FINALLY();
+	{
+		if (res)
+			jq_clear(res);
+
+		if (resultSetID != 0)
+			jq_release_resultset_id(conn, resultSetID);
+
+		tuplestore_donestoring((ReturnSetInfo *) fcinfo->resultinfo->setResult);
+
+		if (conn)
+		{
+			jdbc_release_connection(conn);
+			conn = NULL;
+		}
+	}
+	PG_END_TRY();
+
+	return (Datum) 0;
+}
+
+/*
+ * jq_get_columns: calls conn.getMetaData().getColumns(catalog, schemapattern, tablepattern, columnpattern)
+ */
+Datum
+jdbc_get_columns(PG_FUNCTION_ARGS)
+{
+	Jconn	*conn           = NULL;
+	char	*servername	    = NULL;
+	char    *catalog        = NULL;
+	char    *schemapattern  = NULL;
+	char    *tablepattern   = NULL;
+	char    *columnpattern  = NULL;
+
+	Jresult *volatile res	= NULL;
+	int resultSetID 		= 0;
+
+	TupleDesc	tupleDescriptor;
+
+	PG_TRY();
+	{
+		if (PG_NARGS() == 5)
+		{
+			servername = text_to_cstring(PG_GETARG_TEXT_PP(0));
+			catalog = PG_ARGISNULL(1) ? NULL : text_to_cstring(PG_GETARG_TEXT_PP(1));
+			schemapattern = PG_ARGISNULL(2) ? NULL : text_to_cstring(PG_GETARG_TEXT_PP(2));
+			tablepattern = PG_ARGISNULL(3) ? NULL : text_to_cstring(PG_GETARG_TEXT_PP(3));
+			columnpattern = PG_ARGISNULL(4) ? NULL : text_to_cstring(PG_GETARG_TEXT_PP(4));
+			conn = jdbc_get_conn_by_server_name(servername);
+		}
+		else
+		{
+			/* shouldn't happen */
+			elog(ERROR, "jdbc_fdw: wrong number of arguments");
+		}
+
+		if (!conn)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_CONNECTION_DOES_NOT_EXIST),
+					 errmsg("jdbc_fdw: server \"%s\" not available", servername)));
+		}
+
+		prepTuplestoreResult(fcinfo);
+
+		/* Execute getColumns jdbc method */
+		res = jq_get_columns(conn, catalog, schemapattern, tablepattern, columnpattern, &resultSetID);
+
+		if (*res != PGRES_COMMAND_OK) {
+		    elog(ERROR, "jdbc_fdw: getColumns \"%s\",\"%s\",\"%s\",\"%s\" call failed",
+				catalog, schemapattern, tablepattern, columnpattern);
+			jdbc_fdw_report_error(ERROR, res, conn, false, "JDBC::getMetadata()::getColumns");
+		}
+
+		/* Create temp descriptor */
+		tupleDescriptor = jdbc_create_descriptor(conn, &resultSetID);
+
+		jq_iterate_all_row(fcinfo, conn, tupleDescriptor, resultSetID);
+	}
+	PG_FINALLY();
+	{
+		if (res)
+			jq_clear(res);
+
+		if (resultSetID != 0)
+			jq_release_resultset_id(conn, resultSetID);
+
+		tuplestore_donestoring((ReturnSetInfo *) fcinfo->resultinfo->setResult);
+
+		if (conn)
+		{
+			jdbc_release_connection(conn);
+			conn = NULL;
+		}
+	}
+	PG_END_TRY();
+
+	return (Datum) 0;
+}
+
+
