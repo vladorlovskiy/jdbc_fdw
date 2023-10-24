@@ -350,7 +350,9 @@ public class JDBCUtils {
          * All of resultSet's rows have been returned to the C code.
          * Close tmpResultSet's statement
          */
-        tmpResultSet.getStatement().close();
+        if (tmpResultSet != null && tmpResultSet.getStatement() != null) {
+           tmpResultSet.getStatement().close();
+        }
         clearResultSetID(resultSetID);
         return null;
       }
