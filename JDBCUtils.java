@@ -1176,4 +1176,219 @@ public class JDBCUtils {
       throw e;
     }
   }
+
+
+
+  /*
+   * getCatalogs
+   *   Returns the ResultSetId of calling conn.getMetaData().getCatalogs()
+   */
+  public int getCatalogs() throws Throwable {
+    // ResultSet columns are prefefined by JavaDoc. Some jdbc drivers do not implement the list fully
+    // https://docs.oracle.com/en/java/javase/20/docs/api//java.sql/java/sql/DatabaseMetaData.html
+    // The list of columns has to match with the result declaration of result of the jdbc_get_tables postgres function
+    List<Map.Entry<String,String>> predefinedColumnInfo = List.of(
+                Map.entry("TABLE_CAT", "text")
+          );
+    try {
+      checkConnExist();
+      DatabaseMetaData md = conn.getMetaData();
+      int tmpResultSetKey = initResultSetKey();
+      resultSetInfoMap.put(
+          tmpResultSetKey,
+          new resultSetInfo(
+              md.getCatalogs(),
+              predefinedColumnInfo
+          )
+        );
+      return tmpResultSetKey;
+    } catch (Throwable e) {
+      if (withStackTrace) {
+        e.printStackTrace(exceptionPrintWriter);
+        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      }
+      throw e;
+    }
+  }
+
+
+  /*
+   * getSchemas
+   *   Returns the ResultSetId of calling conn.getMetaData().getSchemas(catalog, schemapattern)
+   */
+  public int getSchemas(String catalog, String schemaPattern) throws Throwable {
+    // ResultSet columns are prefefined by JavaDoc. Some jdbc drivers do not implement the list fully
+    // https://docs.oracle.com/en/java/javase/20/docs/api//java.sql/java/sql/DatabaseMetaData.html
+    // The list of columns has to match with the result declaration of result of the jdbc_get_tables postgres function
+    List<Map.Entry<String,String>> predefinedColumnInfo = List.of(
+                Map.entry("TABLE_CAT", "text"),
+                Map.entry("TABLE_SCHEM", "text")
+          );
+    try {
+      checkConnExist();
+      DatabaseMetaData md = conn.getMetaData();
+      int tmpResultSetKey = initResultSetKey();
+      resultSetInfoMap.put(
+          tmpResultSetKey,
+          new resultSetInfo(
+              md.getSchemas(catalog, schemaPattern),
+              predefinedColumnInfo
+          )
+        );
+      return tmpResultSetKey;
+    } catch (Throwable e) {
+      if (withStackTrace) {
+        e.printStackTrace(exceptionPrintWriter);
+        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      }
+      throw e;
+    }
+  }
+
+
+  /* DRIVER INFORMATION */
+  /*
+   * getDriverMajorVersion
+   *   Returns the ResultSetId of calling conn.getMetaData().getDriverMajorVersion()
+   */
+  public int getDriverMajorVersion() throws Throwable {
+    try {
+      checkConnExist();
+      DatabaseMetaData md = conn.getMetaData();
+      return md.getDriverMajorVersion();
+    } catch (Throwable e) {
+      if (withStackTrace) {
+        e.printStackTrace(exceptionPrintWriter);
+        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      }
+      throw e;
+    }
+  }
+
+  /*
+   * getDriverMinorVersion
+   *   Returns the ResultSetId of calling conn.getMetaData().getDriverMinorVersion()
+   */
+  public int getDriverMinorVersion() throws Throwable {
+    try {
+      checkConnExist();
+      DatabaseMetaData md = conn.getMetaData();
+      return md.getDriverMinorVersion();
+    } catch (Throwable e) {
+      if (withStackTrace) {
+        e.printStackTrace(exceptionPrintWriter);
+        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      }
+      throw e;
+    }
+  }
+  /*
+   * getDriverVersion
+   *   Returns the ResultSetId of calling conn.getMetaData().getDriverVersion()
+   */
+  public String getDriverVersion() throws Throwable {
+    try {
+      checkConnExist();
+      DatabaseMetaData md = conn.getMetaData();
+      return md.getDriverVersion();
+    } catch (Throwable e) {
+      if (withStackTrace) {
+        e.printStackTrace(exceptionPrintWriter);
+        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      }
+      throw e;
+    }
+  }
+
+  /*
+   * getDriverVersion
+   *   Returns the ResultSetId of calling conn.getMetaData().getDriverName()
+   */
+  public String getDriverName() throws Throwable {
+    try {
+      checkConnExist();
+      DatabaseMetaData md = conn.getMetaData();
+      return md.getDriverName();
+    } catch (Throwable e) {
+      if (withStackTrace) {
+        e.printStackTrace(exceptionPrintWriter);
+        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      }
+      throw e;
+    }
+  }
+
+  /* DATABASE INFORMATION */
+  /*
+   * getDatabaseMajorVersion
+   *   Returns the ResultSetId of calling conn.getMetaData().getDatabaseMajorVersion()
+   */
+  public int getDatabaseMajorVersion() throws Throwable {
+    try {
+      checkConnExist();
+      DatabaseMetaData md = conn.getMetaData();
+      return md.getDatabaseMajorVersion();
+    } catch (Throwable e) {
+      if (withStackTrace) {
+        e.printStackTrace(exceptionPrintWriter);
+        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      }
+      throw e;
+    }
+  }
+
+  /*
+   * getDatabaseMinorVersion
+   *   Returns the ResultSetId of calling conn.getMetaData().getDatabaseMinorVersion()
+   */
+  public int getDatabaseMinorVersion() throws Throwable {
+    try {
+      checkConnExist();
+      DatabaseMetaData md = conn.getMetaData();
+      return md.getDatabaseMinorVersion();
+    } catch (Throwable e) {
+      if (withStackTrace) {
+        e.printStackTrace(exceptionPrintWriter);
+        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      }
+      throw e;
+    }
+  }
+
+  /*
+   * getDatabaseProductVersion
+   *   Returns the ResultSetId of calling conn.getMetaData().getDatabaseProductVersion()
+   */
+  public String getDatabaseProductVersion() throws Throwable {
+    try {
+      checkConnExist();
+      DatabaseMetaData md = conn.getMetaData();
+      return md.getDatabaseProductVersion();
+    } catch (Throwable e) {
+      if (withStackTrace) {
+        e.printStackTrace(exceptionPrintWriter);
+        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      }
+      throw e;
+    }
+  }
+
+  /*
+   * getDatabaseProductName
+   *   Returns the ResultSetId of calling conn.getMetaData().getDatabaseProductName()
+   */
+  public String getDatabaseProductName() throws Throwable {
+    try {
+      checkConnExist();
+      DatabaseMetaData md = conn.getMetaData();
+      return md.getDatabaseProductName();
+    } catch (Throwable e) {
+      if (withStackTrace) {
+        e.printStackTrace(exceptionPrintWriter);
+        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      }
+      throw e;
+    }
+  }
+
 }

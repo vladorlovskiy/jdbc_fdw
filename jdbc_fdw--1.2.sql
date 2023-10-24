@@ -26,6 +26,25 @@ CREATE FOREIGN DATA WRAPPER jdbc_fdw
   HANDLER jdbc_fdw_handler
   VALIDATOR jdbc_fdw_validator;
 
+CREATE FUNCTION jdbc_get_catalogs (
+  foregn_server_name text,
+  out table_cat text
+ )
+RETURNS setof text
+AS 'MODULE_PATHNAME','jdbc_get_catalogs'
+LANGUAGE C IMMUTABLE PARALLEL RESTRICTED;
+
+CREATE FUNCTION jdbc_get_schemas (
+  foregn_server_name text,
+  catalog_name text,
+  schema_pattern text,
+  out table_cat text,
+  out table_schem text
+ )
+RETURNS setof record
+AS 'MODULE_PATHNAME','jdbc_get_schemas'
+LANGUAGE C IMMUTABLE PARALLEL RESTRICTED;
+
 CREATE FUNCTION jdbc_get_tables (
   foregn_server_name text,
   catalog_name text,
