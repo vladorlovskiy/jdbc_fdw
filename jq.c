@@ -1787,6 +1787,142 @@ jq_get_JDBCUtils(Jconn *conn, jclass *JDBCUtilsClass, jobject *JDBCUtilsObject)
 	}
 }
 
+
+
+
+/*
+ * jq_get_catalogs: calls conn.getMetaData().getCatalogs()
+ */
+Jresult *
+jq_get_catalogs(Jconn *conn, int *resultSetID)
+{
+	jmethodID	idGetCatalogs;
+	jclass		JDBCUtilsClass;
+	jobject		JDBCUtilsObject;
+	Jresult    *res;
+
+	ereport(DEBUG3,
+		(errmsg("In jq_get_catalogs(%p)", conn)));
+
+	elog(WARNING,"In jq_get_catalogs(%p)",	conn);
+
+	jq_get_JDBCUtils(conn, &JDBCUtilsClass, &JDBCUtilsObject);
+
+	res = (Jresult *) palloc0(sizeof(Jresult));
+	*res = PGRES_FATAL_ERROR;
+
+	idGetCatalogs = (*Jenv)->GetMethodID(
+		Jenv,
+		JDBCUtilsClass,
+		"getCatalogs",
+		"()I");
+	if (idGetCatalogs == NULL)
+	{
+		ereport(ERROR, (errmsg("Failed to find the JDBCUtils.getCatalogs method!")));
+	}
+	/* arguments */
+	jq_exception_clear();
+	*resultSetID = (int) (*Jenv)->CallIntMethod(
+			Jenv,
+			conn->JDBCUtilsObject,
+			idGetCatalogs
+			);
+	jq_get_exception();
+	if (*resultSetID < 0)
+	{
+		/* Return Java memory */
+		ereport(ERROR, (errmsg("Get resultSetID failed with code: %d", *resultSetID)));
+	}
+	ereport(DEBUG3, (errmsg("Get resultSetID successfully, ID: %d", *resultSetID)));
+
+	/* Return Java memory */
+	*res = PGRES_COMMAND_OK;
+	return res;
+}
+
+
+
+
+/*
+ * jq_get_schemas: calls conn.getMetaData().getSchemas(catalog, schemapattern)
+ */
+Jresult *
+jq_get_schemas(Jconn *conn,
+	const char *catalog,
+	const char *schemapattern,
+	int *resultSetID)
+{
+	jmethodID	idGetSchemas;
+	jstring		jcatalog = NULL;
+	jstring     jschemapattern = NULL;
+	jclass		JDBCUtilsClass;
+	jobject		JDBCUtilsObject;
+	Jresult    *res;
+
+	ereport(DEBUG3,
+		(errmsg("In jq_get_schemas(%p): %s, %s",
+		conn, catalog, schemapattern)));
+
+	elog(WARNING,"In jq_get_schemas(%p): %s, %s",
+		conn, catalog, schemapattern);
+
+	jq_get_JDBCUtils(conn, &JDBCUtilsClass, &JDBCUtilsObject);
+
+	res = (Jresult *) palloc0(sizeof(Jresult));
+	*res = PGRES_FATAL_ERROR;
+
+	idGetSchemas = (*Jenv)->GetMethodID(
+		Jenv,
+		JDBCUtilsClass,
+		"getSchemas",
+		"(Ljava/lang/String;Ljava/lang/String;)I");
+	if (idGetSchemas == NULL)
+	{
+		ereport(ERROR, (errmsg("Failed to find the JDBCUtils.getSchemas method!")));
+	}
+	/* arguments */
+	if (catalog)
+	{
+		jcatalog = (*Jenv)->NewStringUTF(Jenv, catalog);
+		if (jcatalog == NULL)
+		{
+			ereport(ERROR, (errmsg("Failed to create catalog argument")));
+		}
+	}
+	if (schemapattern)
+	{
+		jschemapattern = (*Jenv)->NewStringUTF(Jenv, schemapattern);
+		if (jschemapattern == NULL)
+		{
+			ereport(ERROR, (errmsg("Failed to create schemapattern argument")));
+		}
+	}
+	jq_exception_clear();
+	*resultSetID = (int) (*Jenv)->CallIntMethod(
+			Jenv,
+			conn->JDBCUtilsObject,
+			idGetSchemas,
+			jcatalog,
+			jschemapattern
+			);
+	jq_get_exception();
+	if (*resultSetID < 0)
+	{
+		/* Return Java memory */
+		if (jcatalog) (*Jenv)->DeleteLocalRef(Jenv, jcatalog);
+		if (jschemapattern) (*Jenv)->DeleteLocalRef(Jenv, jschemapattern);
+		ereport(ERROR, (errmsg("Get resultSetID failed with code: %d", *resultSetID)));
+	}
+	ereport(DEBUG3, (errmsg("Get resultSetID successfully, ID: %d", *resultSetID)));
+
+	/* Return Java memory */
+	if (jcatalog) (*Jenv)->DeleteLocalRef(Jenv, jcatalog);
+	if (jschemapattern) (*Jenv)->DeleteLocalRef(Jenv, jschemapattern);
+	*res = PGRES_COMMAND_OK;
+	return res;
+}
+
+
 /*
  * jq_get_tables: calls conn.getMetaData().getTables(catalog, schemapattern, tablepattern, tabletypecsv)
  */
