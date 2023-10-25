@@ -350,8 +350,15 @@ public class JDBCUtils {
          * All of resultSet's rows have been returned to the C code.
          * Close tmpResultSet's statement
          */
-        if (tmpResultSet != null && tmpResultSet.getStatement() != null) {
-           tmpResultSet.getStatement().close();
+        if (tmpResultSet != null) {
+          try {
+            //TODO: Introduce a parameter for not tolerating the issue
+            if (tmpResultSet.getStatement() != null) {
+                tmpResultSet.getStatement().close();
+            }
+          } catch(Throwable e) {
+            e.printStackTrace(exceptionPrintWriter);
+          }
         }
         clearResultSetID(resultSetID);
         return null;
@@ -784,11 +791,21 @@ public class JDBCUtils {
       resultSetInfoMap.clear();
 
       if (tmpStmt != null) {
-        tmpStmt.close();
+        try{
+          //TODO: Introduce a parameter for not tolerating the issue
+          tmpStmt.close();
+        } catch (Throwable e) {
+          e.printStackTrace(exceptionPrintWriter);
+        }
         tmpStmt = null;
       }
       if (tmpPstmt != null) {
-        tmpPstmt.close();
+        try {
+          //TODO: Introduce a parameter for not tolerating the issue
+          tmpPstmt.close();
+        } catch (Throwable e) {
+           e.printStackTrace(exceptionPrintWriter);
+        }
         tmpPstmt = null;
       }
     } catch (Throwable e) {
@@ -808,7 +825,12 @@ public class JDBCUtils {
     try {
       closeStatement();
       if (conn != null) {
-        conn.close();
+        try {
+          //TODO: Introduce a parameter for not tolerating the issue
+          conn.close();
+        } catch (Throwable e) {
+          e.printStackTrace(exceptionPrintWriter);
+        }
         conn = null;
       }
     } catch (Throwable e) {
