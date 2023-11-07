@@ -893,7 +893,12 @@ public class JDBCUtils {
       checkConnExist();
       PreparedStatement tmpPstmt = resultSetInfoMap.get(resultSetID).getPstmt();
       checkPstmt(tmpPstmt);
-      tmpPstmt.setNull(attnum, Types.NULL);
+      if (tmpPstmt != null && tmpPstmt.getParameterMetaData() != null) {
+        int sqlType = tmpPstmt.getParameterMetaData().getParameterType(attnum);
+        tmpPstmt.setNull(attnum, sqlType);
+      } else {
+        tmpPstmt.setNull(attnum, Types.NULL);
+      }
       resultSetInfoMap.get(resultSetID).setPstmt(tmpPstmt);
     } catch (Throwable e) {
       if (withStackTrace) {
