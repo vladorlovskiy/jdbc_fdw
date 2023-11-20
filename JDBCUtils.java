@@ -1248,8 +1248,8 @@ public class JDBCUtils {
     // https://docs.oracle.com/en/java/javase/20/docs/api//java.sql/java/sql/DatabaseMetaData.html
     // The list of columns has to match with the result declaration of result of the jdbc_get_tables postgres function
     List<Map.Entry<String,String>> predefinedColumnInfo = List.of(
-                Map.entry("TABLE_CAT", "text"),
-                Map.entry("TABLE_SCHEM", "text")
+                Map.entry("TABLE_SCHEM", "text"),
+                Map.entry("TABLE_CATALOG ", "text")
           );
     try {
       checkConnExist();
