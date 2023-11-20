@@ -38,8 +38,8 @@ CREATE FUNCTION jdbc_get_schemas (
   foregn_server_name text,
   catalog_name text,
   schema_pattern text,
-  out table_cat text,
-  out table_schem text
+  out table_schem text,
+  out table_catalog text
  )
 RETURNS setof record
 AS 'MODULE_PATHNAME','jdbc_get_schemas'
