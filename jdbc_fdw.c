@@ -240,6 +240,8 @@ PG_FUNCTION_INFO_V1(jdbc_get_catalogs);
 PG_FUNCTION_INFO_V1(jdbc_get_schemas);
 PG_FUNCTION_INFO_V1(jdbc_get_tables);
 PG_FUNCTION_INFO_V1(jdbc_get_columns);
+PG_FUNCTION_INFO_V1(jdbc_set_autocommit);
+PG_FUNCTION_INFO_V1(jdbc_get_autocommit);
 
 /*
  * FDW callback routines
@@ -409,6 +411,94 @@ Datum
 jdbc_fdw_version(PG_FUNCTION_ARGS)
 {
 	PG_RETURN_INT32(CODE_VERSION);
+}
+
+Datum jdbc_get_autocommit(PG_FUNCTION_ARGS)
+{
+	Jconn	*conn		= NULL;
+	char *servername	= NULL;
+	bool autoCommit	= false;
+
+	PG_TRY();
+	{
+		if (PG_NARGS() == 1)
+		{
+			servername = text_to_cstring(PG_GETARG_TEXT_PP(0));
+			conn = jdbc_get_conn_by_server_name(servername);
+		}
+		else
+		{
+			/* shouldn't happen */
+			elog(ERROR, "jdbc_fdw: wrong number of arguments");
+		}
+
+		if (!conn)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_CONNECTION_DOES_NOT_EXIST),
+					 errmsg("jdbc_fdw: server \"%s\" not available", servername)));
+		}
+		autoCommit = jq_get_autocommit();
+  	PG_RETURN_BOOL(autoCommit);
+	}
+	PG_FINALLY();
+	{
+		if (conn)
+		{
+			jdbc_release_connection(conn);
+			conn = NULL;
+		}
+	}
+	PG_END_TRY();
+
+	return (Datum) 0;
+}
+
+
+
+Datum jdbc_set_autocommit(PG_FUNCTION_ARGS)
+{
+	Jconn	*conn		= NULL;
+	char *servername	= NULL;
+
+	Jresult *volatile res	= NULL;
+
+	TupleDesc	tupleDescriptor;
+
+	PG_TRY();
+	{
+		if (PG_NARGS() == 2)
+		{
+			servername = text_to_cstring(PG_GETARG_TEXT_PP(0));
+			autoCommit = DatumGetBool(PG_GETARG_DATUM(1));
+			conn = jdbc_get_conn_by_server_name(servername);
+		}
+		else
+		{
+			/* shouldn't happen */
+			elog(ERROR, "jdbc_fdw: wrong number of arguments");
+		}
+
+		if (!conn)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_CONNECTION_DOES_NOT_EXIST),
+					 errmsg("jdbc_fdw: server \"%s\" not available", servername)));
+		}
+		jq_set_autocommit(autoCommit);
+		PG_RETURN_VOID();
+	}
+	PG_FINALLY();
+	{
+		if (conn)
+		{
+			jdbc_release_connection(conn);
+			conn = NULL;
+		}
+	}
+	PG_END_TRY();
+
+	return (Datum) 0;
 }
 
 Datum
