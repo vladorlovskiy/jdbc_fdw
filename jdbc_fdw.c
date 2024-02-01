@@ -438,7 +438,7 @@ Datum jdbc_get_autocommit(PG_FUNCTION_ARGS)
 					(errcode(ERRCODE_CONNECTION_DOES_NOT_EXIST),
 					 errmsg("jdbc_fdw: server \"%s\" not available", servername)));
 		}
-		autoCommit = jq_get_autocommit();
+		autoCommit = jq_get_autocommit(conn);
   	PG_RETURN_BOOL(autoCommit);
 	}
 	PG_FINALLY();
@@ -460,7 +460,7 @@ Datum jdbc_set_autocommit(PG_FUNCTION_ARGS)
 {
 	Jconn	*conn		= NULL;
 	char *servername	= NULL;
-
+	bool autoCommit = false;
 	Jresult *volatile res	= NULL;
 
 	TupleDesc	tupleDescriptor;
@@ -485,7 +485,7 @@ Datum jdbc_set_autocommit(PG_FUNCTION_ARGS)
 					(errcode(ERRCODE_CONNECTION_DOES_NOT_EXIST),
 					 errmsg("jdbc_fdw: server \"%s\" not available", servername)));
 		}
-		jq_set_autocommit(autoCommit);
+		jq_set_autocommit(conn, autoCommit);
 		PG_RETURN_VOID();
 	}
 	PG_FINALLY();
