@@ -100,3 +100,12 @@ CREATE FUNCTION jdbc_get_columns (
 RETURNS setof record
 AS 'MODULE_PATHNAME','jdbc_get_columns'
 LANGUAGE C IMMUTABLE PARALLEL RESTRICTED;
+
+
+CREATE OR REPLACE FUNCTION jdbc_set_autocommit(foregn_server_name text, flag boolean)
+RETURNS pg_catalog.void STRICT
+AS 'MODULE_PATHNAME' LANGUAGE C;
+
+CREATE OR REPLACE FUNCTION jdbc_get_autocommit(foregn_server_name text)
+RETURNS pg_catalog.bool STRICT
+AS 'MODULE_PATHNAME' LANGUAGE C;

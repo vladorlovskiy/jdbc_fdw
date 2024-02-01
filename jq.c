@@ -2129,3 +2129,65 @@ jq_get_columns(Jconn *conn,
 	*res = PGRES_COMMAND_OK;
 	return res;
 }
+
+
+
+
+
+void jq_set_autocommit(Jconn * conn, bool autoCommit)
+{
+	jmethodID	method;
+	jclass		JDBCUtilsClass;
+	jobject		JDBCUtilsObject;
+
+	ereport(DEBUG3, (errmsg("In jq_set_autocommit(%p): %d",	conn, autoCommit)));
+
+	jq_get_JDBCUtils(conn, &JDBCUtilsClass, &JDBCUtilsObject);
+
+	method = (*Jenv)->GetMethodID(
+		Jenv,
+		JDBCUtilsClass,
+		"setAutoCommit",
+		"(Z)V");
+	if (method == NULL)
+	{
+		ereport(ERROR, (errmsg("Failed to find the JDBCUtils.setAutoCommit method!")));
+	}
+	jq_exception_clear();
+	(*Jenv)->CallVoidMethod(
+			Jenv,
+			conn->JDBCUtilsObject,
+			method,
+			autoCommit
+			);
+	jq_get_exception();
+}
+
+bool jq_get_autocommit(Jconn * conn)
+{
+	jmethodID	method;
+	jclass		JDBCUtilsClass;
+	jobject		JDBCUtilsObject;
+  jboolean  jautoCommit;
+	ereport(DEBUG3, (errmsg("In jq_get_autocommit(%p)",	conn)));
+
+	jq_get_JDBCUtils(conn, &JDBCUtilsClass, &JDBCUtilsObject);
+
+	method = (*Jenv)->GetMethodID(
+		Jenv,
+		JDBCUtilsClass,
+		"getAutoCommit",
+		"()Z");
+	if (method == NULL)
+	{
+		ereport(ERROR, (errmsg("Failed to find the JDBCUtils.getAutoCommit method!")));
+	}
+	jq_exception_clear();
+	jautoCommit = (*Jenv)->CallBooleanMethod(
+			Jenv,
+			conn->JDBCUtilsObject,
+			method
+			);
+	jq_get_exception();
+	return (bool) jautoCommit;
+}

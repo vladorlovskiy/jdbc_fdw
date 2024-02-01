@@ -1272,6 +1272,31 @@ public class JDBCUtils {
     }
   }
 
+  public boolean getAutoCommit() throws Throwable {
+    try {
+      checkConnExist();
+      return conn.getAutoCommit();
+    } catch (Throwable e) {
+      if (withStackTrace) {
+        e.printStackTrace(exceptionPrintWriter);
+        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      }
+      throw e;
+    }
+  }
+  public void setAutoCommit(boolean flag) throws Throwable {
+    try {
+      checkConnExist();
+      conn.setAutoCommit(flag);
+    } catch (Throwable e) {
+      if (withStackTrace) {
+        e.printStackTrace(exceptionPrintWriter);
+        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      }
+      throw e;
+    }
+  }
+
 
   /* DRIVER INFORMATION */
   /*

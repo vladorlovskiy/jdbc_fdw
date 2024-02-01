@@ -97,4 +97,7 @@ extern Jresult * jq_get_columns(Jconn *conn,
 	const char *tablepattern,
 	const char *columnpattern,
 	int *resultSetID);
+extern void jq_set_autocommit(Jconn * conn, bool autocommit);
+extern bool jq_get_autocommit(Jconn * conn);
+
 #endif							/* JQ_H */
