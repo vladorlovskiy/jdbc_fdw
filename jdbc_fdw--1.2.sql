@@ -107,5 +107,5 @@ RETURNS pg_catalog.void STRICT
 AS 'MODULE_PATHNAME' LANGUAGE C;
 
 CREATE OR REPLACE FUNCTION jdbc_get_autocommit(foregn_server_name text)
-RETURNS pg_catalog.boolean STRICT
+RETURNS pg_catalog.bool STRICT
 AS 'MODULE_PATHNAME' LANGUAGE C;
