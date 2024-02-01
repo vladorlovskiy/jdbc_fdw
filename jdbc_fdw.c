@@ -439,7 +439,6 @@ Datum jdbc_get_autocommit(PG_FUNCTION_ARGS)
 					 errmsg("jdbc_fdw: server \"%s\" not available", servername)));
 		}
 		autoCommit = jq_get_autocommit(conn);
-  	PG_RETURN_BOOL(autoCommit);
 	}
 	PG_FINALLY();
 	{
@@ -450,6 +449,8 @@ Datum jdbc_get_autocommit(PG_FUNCTION_ARGS)
 		}
 	}
 	PG_END_TRY();
+
+ 	PG_RETURN_BOOL(autoCommit);
 
 	return (Datum) 0;
 }
@@ -486,7 +487,6 @@ Datum jdbc_set_autocommit(PG_FUNCTION_ARGS)
 					 errmsg("jdbc_fdw: server \"%s\" not available", servername)));
 		}
 		jq_set_autocommit(conn, autoCommit);
-		PG_RETURN_VOID();
 	}
 	PG_FINALLY();
 	{
@@ -497,6 +497,8 @@ Datum jdbc_set_autocommit(PG_FUNCTION_ARGS)
 		}
 	}
 	PG_END_TRY();
+
+  PG_RETURN_VOID();
 
 	return (Datum) 0;
 }
