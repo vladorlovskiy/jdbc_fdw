@@ -100,4 +100,11 @@ extern Jresult * jq_get_columns(Jconn *conn,
 extern void jq_set_autocommit(Jconn * conn, bool autocommit);
 extern bool jq_get_autocommit(Jconn * conn);
 
+extern int jq_exec_update(Jconn * conn, const char *command);
+extern void jq_snowflake_upload_to_stage(Jconn * conn,
+	const char *stageName, const char *destPrefix,
+	const char *data, const char *fileName,
+	bool compress);
+
+
 #endif							/* JQ_H */

@@ -2191,3 +2191,130 @@ bool jq_get_autocommit(Jconn * conn)
 	jq_get_exception();
 	return (bool) jautoCommit;
 }
+
+
+
+
+int jq_exec_update(Jconn * conn, const char *command)
+{
+	jmethodID	method;
+	jclass		JDBCUtilsClass;
+	jobject		JDBCUtilsObject;
+	jstring		jcommand = NULL;
+	int rowsAffected = 0;
+	ereport(DEBUG3, (errmsg("In jq_exec_update(%p): %s",	conn, command)));
+
+	jq_get_JDBCUtils(conn, &JDBCUtilsClass, &JDBCUtilsObject);
+
+	method = (*Jenv)->GetMethodID(
+		Jenv,
+		JDBCUtilsClass,
+		"execUpdate",
+		"(Ljava/lang/String;)I");
+	if (method == NULL)
+	{
+		ereport(ERROR, (errmsg("Failed to find the JDBCUtils.execUpdate method!")));
+	}
+
+	/* arguments */
+	if(command)
+	{
+		jcommand = (*Jenv)->NewStringUTF(Jenv, command);
+		if (jcommand == NULL)
+		{
+			ereport(ERROR, (errmsg("Failed to create command argument")));
+		}
+	}
+
+	jq_exception_clear();
+	rowsAffected = (*Jenv)->CallIntMethod(
+			Jenv,
+			conn->JDBCUtilsObject,
+			method,
+			jcommand
+			);
+	jq_get_exception();
+
+	if (jcommand) (*Jenv)->DeleteLocalRef(Jenv, jcommand);
+	return rowsAffected;
+}
+
+
+
+void jq_snowflake_upload_to_stage(Jconn * conn,
+	const char *stageName, const char *destPrefix,
+	const char *fileData, const char *fileName,
+	bool compress)
+{
+	jmethodID	method;
+	jclass		JDBCUtilsClass;
+	jobject		JDBCUtilsObject;
+	jstring		jstageName = NULL;
+	jstring   jdestPrefix = NULL;
+	jstring   jfileData = NULL;
+	jstring   jfileName = NULL;
+
+	ereport(DEBUG3, (errmsg("In jq_snowflake_upload_to_stage(%p): %s, %s, %s, %s, %d",
+		conn, stageName, destPrefix, fileData, fileName, compress )));
+	jq_get_JDBCUtils(conn, &JDBCUtilsClass, &JDBCUtilsObject);
+
+	method = (*Jenv)->GetMethodID(
+		Jenv,
+		JDBCUtilsClass,
+		"snowflakeUploadToStage",
+		"(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Z)V");
+
+	/* arguments */
+	if(stageName)
+	{
+		jstageName = (*Jenv)->NewStringUTF(Jenv, stageName);
+		if (jstageName == NULL)
+		{
+			ereport(ERROR, (errmsg("Failed to create stageName argument")));
+		}
+	}
+	if(destPrefix)
+	{
+		jdestPrefix = (*Jenv)->NewStringUTF(Jenv, destPrefix);
+		if (jdestPrefix == NULL)
+		{
+			ereport(ERROR, (errmsg("Failed to create destPrefix argument")));
+		}
+	}
+	if(fileData)
+	{
+		jfileData = (*Jenv)->NewStringUTF(Jenv, fileData);
+		if (jfileData == NULL)
+		{
+			ereport(ERROR, (errmsg("Failed to create fileData argument")));
+		}
+	}
+	if(fileName)
+	{
+		jfileName = (*Jenv)->NewStringUTF(Jenv, fileName);
+		if (jfileName == NULL)
+		{
+			ereport(ERROR, (errmsg("Failed to create fileName argument")));
+		}
+	}
+
+	jq_exception_clear();
+	(*Jenv)->CallVoidMethod(
+			Jenv,
+			conn->JDBCUtilsObject,
+			method,
+			jstageName,
+			jdestPrefix,
+			jfileData,
+			jfileName,
+			compress
+			);
+	jq_get_exception();
+
+	if (jstageName) (*Jenv)->DeleteLocalRef(Jenv, jstageName);
+	if (jdestPrefix) (*Jenv)->DeleteLocalRef(Jenv, jdestPrefix);
+	if (jfileData) (*Jenv)->DeleteLocalRef(Jenv, jfileData);
+	if (jfileName) (*Jenv)->DeleteLocalRef(Jenv, jfileName);
+}
+
+

@@ -22,6 +22,7 @@ UNAME = $(shell uname)
 TRGTS = JAVAFILES
 
 JAVA_SOURCES = \
+	net/snowflake/client/jdbc/SnowflakeConnection.java \
 	JDBCUtils.java \
 	JDBCDriverLoader.java \
  

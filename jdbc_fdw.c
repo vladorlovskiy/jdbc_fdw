@@ -242,6 +242,8 @@ PG_FUNCTION_INFO_V1(jdbc_get_tables);
 PG_FUNCTION_INFO_V1(jdbc_get_columns);
 PG_FUNCTION_INFO_V1(jdbc_set_autocommit);
 PG_FUNCTION_INFO_V1(jdbc_get_autocommit);
+PG_FUNCTION_INFO_V1(jdbc_exec_update);
+PG_FUNCTION_INFO_V1(jdbc_snowflake_upload_to_stage);
 
 /*
  * FDW callback routines
@@ -3535,3 +3537,104 @@ jdbc_get_columns(PG_FUNCTION_ARGS)
 }
 
 
+
+
+Datum
+jdbc_exec_update(PG_FUNCTION_ARGS)
+{
+	Jconn	*conn           = NULL;
+	char	*server_name	    = NULL;
+	char  *command        = NULL;
+	int   affected_rows    = 0;
+
+	PG_TRY();
+	{
+		if (PG_NARGS() == 2)
+		{
+			server_name = text_to_cstring(PG_GETARG_TEXT_PP(0));
+			command = PG_ARGISNULL(1) ? NULL : text_to_cstring(PG_GETARG_TEXT_PP(1));
+			conn = jdbc_get_conn_by_server_name(server_name);
+		}
+		else
+		{
+			/* shouldn't happen */
+			elog(ERROR, "jdbc_fdw: wrong number of arguments");
+		}
+
+		if (!conn)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_CONNECTION_DOES_NOT_EXIST),
+					 errmsg("jdbc_fdw: server \"%s\" not available", server_name)));
+		}
+
+		/* Execute execUpdate jdbc method */
+		affected_rows = jq_exec_update(conn, command);
+
+	}
+	PG_FINALLY();
+	{
+		if (conn)
+		{
+			jdbc_release_connection(conn);
+			conn = NULL;
+		}
+	}
+	PG_END_TRY();
+ 	PG_RETURN_INT32(affected_rows);
+	return (Datum) 0;
+}
+
+
+Datum
+jdbc_snowflake_upload_to_stage(PG_FUNCTION_ARGS)
+{
+	Jconn	*conn           = NULL;
+	char	*server_name	    = NULL;
+	char  *stage_name        = NULL;
+	char  *dest_prefix        = NULL;
+	char  *file_data        = NULL;
+	char  *file_name        = NULL;
+	bool  compress = false;
+
+	PG_TRY();
+	{
+		if (PG_NARGS() == 6)
+		{
+			server_name = text_to_cstring(PG_GETARG_TEXT_PP(0));
+			stage_name = PG_ARGISNULL(1) ? NULL : text_to_cstring(PG_GETARG_TEXT_PP(1));
+			dest_prefix = PG_ARGISNULL(2) ? NULL : text_to_cstring(PG_GETARG_TEXT_PP(2));
+			file_data = PG_ARGISNULL(3) ? NULL : text_to_cstring(PG_GETARG_TEXT_PP(3));
+			file_name = PG_ARGISNULL(4) ? NULL : text_to_cstring(PG_GETARG_TEXT_PP(4));
+			compress = DatumGetBool(PG_GETARG_DATUM(5));
+			conn = jdbc_get_conn_by_server_name(server_name);
+		}
+		else
+		{
+			/* shouldn't happen */
+			elog(ERROR, "jdbc_fdw: wrong number of arguments");
+		}
+
+		if (!conn)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_CONNECTION_DOES_NOT_EXIST),
+					 errmsg("jdbc_fdw: server \"%s\" not available", server_name)));
+		}
+
+		/* Execute execUpdate jdbc method */
+		 jq_snowflake_upload_to_stage(conn, stage_name, dest_prefix, file_data, file_name, compress);
+
+	}
+	PG_FINALLY();
+	{
+		if (conn)
+		{
+			jdbc_release_connection(conn);
+			conn = NULL;
+		}
+	}
+	PG_END_TRY();
+
+	return (Datum) 0;
+}
