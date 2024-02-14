@@ -109,3 +109,17 @@ AS 'MODULE_PATHNAME' LANGUAGE C;
 CREATE OR REPLACE FUNCTION jdbc_get_autocommit(foregn_server_name text)
 RETURNS pg_catalog.bool STRICT
 AS 'MODULE_PATHNAME' LANGUAGE C;
+
+CREATE OR REPLACE FUNCTION jdbc_exec_update(text, text)
+RETURNS pg_catalog.int4 STRICT
+AS 'MODULE_PATHNAME' LANGUAGE C;
+
+CREATE OR REPLACE FUNCTION jdbc_snowflake_upload_to_stage(
+  foregn_server_name text,
+  stage_name text, dest_prefix text,
+  file_data text, file_name text,
+  compress boolean
+)
+RETURNS pg_catalog.void STRICT
+AS 'MODULE_PATHNAME' LANGUAGE C;
+

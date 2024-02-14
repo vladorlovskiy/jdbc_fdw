@@ -26,7 +26,7 @@ import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.concurrent.*;
-
+import net.snowflake.client.jdbc.SnowflakeConnection;
 public class JDBCUtils {
   private Connection conn = null;
   private static JDBCDriverLoader jdbcDriverLoader;
@@ -1298,6 +1298,10 @@ public class JDBCUtils {
   }
 
 
+
+
+
+
   /* DRIVER INFORMATION */
   /*
    * getDriverMajorVersion
@@ -1434,6 +1438,34 @@ public class JDBCUtils {
       checkConnExist();
       DatabaseMetaData md = conn.getMetaData();
       return md.getDatabaseProductName();
+    } catch (Throwable e) {
+      if (withStackTrace) {
+        e.printStackTrace(exceptionPrintWriter);
+        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      }
+      throw e;
+    }
+  }
+
+  public int execUpdate(String sqlCommand) throws SQLException {
+    try {
+      checkConnExist();
+      return conn.createStatement().executeUpdate(sqlCommand);
+    } catch (Throwable e) {
+      if (withStackTrace) {
+        e.printStackTrace(exceptionPrintWriter);
+        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      }
+      throw e;
+    }
+  }
+
+  public void snowflakeUploadToStage(String stageName, String destPrefix, String data, String fileName, boolean compress) throws Throwable {
+    try {
+      checkConnExist();
+      try (InputStream idata = new ByteArrayInputStream(data.getBytes())) {
+        conn.unwrap(SnowflakeConnection.class).uploadStream(stageName, destPrefix, idata, fileName, compress);
+      }
     } catch (Throwable e) {
       if (withStackTrace) {
         e.printStackTrace(exceptionPrintWriter);
