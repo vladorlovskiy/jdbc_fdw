@@ -465,9 +465,6 @@ Datum jdbc_set_autocommit(PG_FUNCTION_ARGS)
 	Jconn	*conn		= NULL;
 	char *servername	= NULL;
 	bool autoCommit = false;
-	Jresult *volatile res	= NULL;
-
-	TupleDesc	tupleDescriptor;
 
 	PG_TRY();
 	{
@@ -1402,7 +1399,7 @@ jdbcReScanForeignScan(ForeignScanState *node)
 
 	ereport(DEBUG3, (errmsg("In jdbcReScanForeignScan")));
 
-	if (!fsstate->cursor_exists || !fsstate->resultSetID > 0)
+	if (!fsstate->cursor_exists || !(fsstate->resultSetID > 0))
 		return;
 
 	(void) jq_exec_id(fsstate->conn, fsstate->query, &fsstate->resultSetID);
@@ -3590,13 +3587,16 @@ jdbc_exec_update(PG_FUNCTION_ARGS)
 Datum
 jdbc_exec_update_params(PG_FUNCTION_ARGS)
 {
-	Jresult    *res;
+	Jresult    *res = NULL;
 	char	*server_name	    = NULL;
 	int   affected_rows    = 0;
 	int   n_args = 0;
-
-	TupleDesc tupleDescriptor;
+  int   bindnum = 0;
+  int   i_arg  = 0;
+  bool  is_null;
 	jdbcFdwModifyState state;
+  Oid   type;
+  Datum value;
 
 	PG_TRY();
 	{
@@ -3621,13 +3621,12 @@ jdbc_exec_update_params(PG_FUNCTION_ARGS)
 					 errmsg("jdbc_fdw: server \"%s\" not available", server_name)));
 		}
 		jdbc_prepare_foreign_modify(&state);
-    int bindnum = 0;
-    int i_arg = 2;
-		for (; i_arg < n_args; i_arg++, bindnum++)
+    bindnum = 0;
+		for (i_arg = 2; i_arg < n_args; i_arg++, bindnum++)
 		{
-			Oid type = get_fn_expr_argtype(fcinfo->flinfo, i_arg);
-			bool is_null = PG_ARGISNULL(i_arg);
-			Datum value = is_null ? (Datum) 0 : PG_GETARG_DATUM(i_arg);
+      type = get_fn_expr_argtype(fcinfo->flinfo, i_arg);
+			is_null = PG_ARGISNULL(i_arg);
+			value = is_null ? (Datum) 0 : PG_GETARG_DATUM(i_arg);
 			jq_bind_sql_var(state.conn, type, bindnum, value, &is_null, state.resultSetID);
 		}
 		res = jq_exec_prepared(state.conn,
@@ -3639,7 +3638,7 @@ jdbc_exec_update_params(PG_FUNCTION_ARGS)
     {
 				jdbc_fdw_report_error(ERROR, res, state.conn, true, state.query);
 		}
-		affected_rows = jq_get_number_of_affected_rows(state.resultSetID);
+		affected_rows = jq_get_number_of_affected_rows(state.conn, state.resultSetID);
 		PG_RETURN_INT32(affected_rows);
 	}
 	PG_FINALLY();
