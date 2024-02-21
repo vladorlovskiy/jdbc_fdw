@@ -3607,7 +3607,8 @@ jdbc_exec_update_params(PG_FUNCTION_ARGS)
 			state.query = PG_ARGISNULL(1) ? NULL : text_to_cstring(PG_GETARG_TEXT_PP(1));
   		state.conn = jdbc_get_conn_by_server_name(server_name);
 			state.p_nums = n_args - 2;
-		else
+    }
+    else
 		{
 			/* shouldn't happen */
 			elog(ERROR, "jdbc_fdw: wrong number of arguments");
