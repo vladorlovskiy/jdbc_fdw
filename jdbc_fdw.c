@@ -3621,21 +3621,23 @@ jdbc_exec_update_params(PG_FUNCTION_ARGS)
 					 errmsg("jdbc_fdw: server \"%s\" not available", server_name)));
 		}
 		jdbc_prepare_foreign_modify(&state);
-
-		for (int bindnum = 0, int i_arg = 2; i_arg < n_args; i_arg++, bindnum++)
+    int bindnum = 0;
+    int i_arg = 2;
+		for (; i_arg < n_args; i_arg++, bindnum++)
 		{
 			Oid type = get_fn_expr_argtype(fcinfo->flinfo, i_arg);
-			boolean is_null = PG_ARGISNULL(i_arg);
+			bool is_null = PG_ARGISNULL(i_arg);
 			Datum value = is_null ? (Datum) 0 : PG_GETARG_DATUM(i_arg);
 			jq_bind_sql_var(state.conn, type, bindnum, value, &is_null, state.resultSetID);
 		}
-		res = jq_exec_prepared(state->conn,
+		res = jq_exec_prepared(state.conn,
 							NULL,
 							NULL,
 							0,
-							state->resultSetID);
+							state.resultSetID);
 		if (*res != PGRES_COMMAND_OK)
-				jdbc_fdw_report_error(ERROR, res, state->conn, true, state->query);
+    {
+				jdbc_fdw_report_error(ERROR, res, state.conn, true, state.query);
 		}
 		affected_rows = jq_get_number_of_affected_rows(state.resultSetID);
 		PG_RETURN_INT32(affected_rows);
@@ -3646,10 +3648,10 @@ jdbc_exec_update_params(PG_FUNCTION_ARGS)
 			jq_clear(res);
 
 		if (state.resultSetID != 0)
-			jq_release_resultset_id(state->conn, state.resultSetID);
+			jq_release_resultset_id(state.conn, state.resultSetID);
 
-		if (state->conn)
-			jdbc_release_connection(state->conn);
+		if (state.conn)
+			jdbc_release_connection(state.conn);
 	}
 	PG_END_TRY();
 	return (Datum) 0;
