@@ -57,6 +57,7 @@ extern Jresult * jq_exec_id(Jconn * conn, const char *query, int *resultSetID);
 extern void *jq_release_resultset_id(Jconn * conn, int resultSetID);
 extern Jresult * jq_exec_prepared(Jconn * conn, const int *paramLengths,
 								  const int *paramFormats, int resultFormat, int resultSetID);
+extern int jq_get_number_of_affected_rows(Jconn * conn, int resultSetID);
 extern void jq_clear(Jresult * res);
 extern char *jq_cmd_tuples(Jresult * res);
 extern char *jq_get_value(const Jresult * res, int tup_num, int field_num);

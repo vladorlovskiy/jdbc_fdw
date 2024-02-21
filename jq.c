@@ -885,6 +885,28 @@ jq_exec_prepared(Jconn * conn, const int *paramLengths,
 	return res;
 }
 
+int jq_get_number_of_affected_rows(Jconn * conn, int resultSetID)
+{
+	jmethodID	method;
+	jclass		JDBCUtilsClass;
+	jobject		JDBCUtilsObject;
+	int numberOfRows = 0;
+
+	ereport(DEBUG3, (errmsg("In jq_get_number_of_affected_rows")));
+
+	jq_get_JDBCUtils(conn, &JDBCUtilsClass, &JDBCUtilsObject);
+
+	method = (*Jenv)->GetMethodID(Jenv, JDBCUtilsClass, "getNumberOfAffectedRows","(I)I");
+	if (method == NULL)
+	{
+		ereport(ERROR, (errmsg("Failed to find the JDBCUtils.getNumberOfAffectedRows method!")));
+	}
+	jq_exception_clear();
+	numberOfRows = (int) (*Jenv)->CallIntMethod(Jenv, conn->JDBCUtilsObject, method, resultSetID);
+	jq_get_exception();
+	return numberOfRows;
+}
+
 void
 jq_clear(Jresult * res)
 {

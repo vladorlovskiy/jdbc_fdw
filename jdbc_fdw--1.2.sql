@@ -114,6 +114,10 @@ CREATE OR REPLACE FUNCTION jdbc_exec_update(text, text)
 RETURNS pg_catalog.int4 STRICT
 AS 'MODULE_PATHNAME' LANGUAGE C;
 
+CREATE OR REPLACE FUNCTION jdbc_exec_update_params(text, text, anyelement)
+RETURNS pg_catalog.int4 STRICT
+AS 'MODULE_PATHNAME' LANGUAGE C;
+
 CREATE OR REPLACE FUNCTION jdbc_snowflake_upload_to_stage(
   foregn_server_name text,
   stage_name text, dest_prefix text,

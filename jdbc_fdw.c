@@ -243,6 +243,7 @@ PG_FUNCTION_INFO_V1(jdbc_get_columns);
 PG_FUNCTION_INFO_V1(jdbc_set_autocommit);
 PG_FUNCTION_INFO_V1(jdbc_get_autocommit);
 PG_FUNCTION_INFO_V1(jdbc_exec_update);
+PG_FUNCTION_INFO_V1(jdbc_exec_update_params);
 PG_FUNCTION_INFO_V1(jdbc_snowflake_upload_to_stage);
 
 /*
@@ -3585,6 +3586,73 @@ jdbc_exec_update(PG_FUNCTION_ARGS)
 	return (Datum) 0;
 }
 
+
+Datum
+jdbc_exec_update_params(PG_FUNCTION_ARGS)
+{
+	Jresult    *res;
+	char	*server_name	    = NULL;
+	int   affected_rows    = 0;
+	int   n_args = 0;
+
+	TupleDesc tupleDescriptor;
+	jdbcFdwModifyState state;
+
+	PG_TRY();
+	{
+	  n_args = PG_NARGS();
+		if (n_args >= 2)
+		{
+			server_name = text_to_cstring(PG_GETARG_TEXT_PP(0));
+			state.query = PG_ARGISNULL(1) ? NULL : text_to_cstring(PG_GETARG_TEXT_PP(1));
+  		state.conn = jdbc_get_conn_by_server_name(server_name);
+			state.p_nums = n_args - 2;
+		else
+		{
+			/* shouldn't happen */
+			elog(ERROR, "jdbc_fdw: wrong number of arguments");
+		}
+
+		if (!state.conn)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_CONNECTION_DOES_NOT_EXIST),
+					 errmsg("jdbc_fdw: server \"%s\" not available", server_name)));
+		}
+		jdbc_prepare_foreign_modify(&state);
+
+		for (int bindnum = 0, int i_arg = 2; i_arg < n_args; i_arg++, bindnum++)
+		{
+			Oid type = get_fn_expr_argtype(fcinfo->flinfo, i_arg);
+			boolean is_null = PG_ARGISNULL(i_arg);
+			Datum value = is_null ? (Datum) 0 : PG_GETARG_DATUM(i_arg);
+			jq_bind_sql_var(state.conn, type, bindnum, value, &is_null, state.resultSetID);
+		}
+		res = jq_exec_prepared(state->conn,
+							NULL,
+							NULL,
+							0,
+							state->resultSetID);
+		if (*res != PGRES_COMMAND_OK)
+				jdbc_fdw_report_error(ERROR, res, state->conn, true, state->query);
+		}
+		affected_rows = jq_get_number_of_affected_rows(state.resultSetID);
+		PG_RETURN_INT32(affected_rows);
+	}
+	PG_FINALLY();
+	{
+		if (res)
+			jq_clear(res);
+
+		if (state.resultSetID != 0)
+			jq_release_resultset_id(state->conn, state.resultSetID);
+
+		if (state->conn)
+			jdbc_release_connection(state->conn);
+	}
+	PG_END_TRY();
+	return (Datum) 0;
+}
 
 Datum
 jdbc_snowflake_upload_to_stage(PG_FUNCTION_ARGS)
