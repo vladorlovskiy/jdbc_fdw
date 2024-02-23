@@ -1848,7 +1848,7 @@ jdbcExecForeignInsert(EState *estate,
 	 * We don't use a PG_TRY block here, so be careful not to throw error
 	 * without releasing the Jresult.
 	 */
-	res = jq_exec_prepared(fmstate->conn,
+	res = jq_exec_update_prepared(fmstate->conn,
 						   NULL,
 						   NULL,
 						   0,
@@ -1919,7 +1919,7 @@ jdbcExecForeignUpdate(EState *estate,
 	 * We don't use a PG_TRY block here, so be careful not to throw error
 	 * without releasing the Jresult.
 	 */
-	res = jq_exec_prepared(fmstate->conn,
+	res = jq_exec_update_prepared(fmstate->conn,
 						   NULL,
 						   NULL,
 						   0,
@@ -1967,7 +1967,7 @@ jdbcExecForeignDelete(EState *estate,
 	 * We don't use a PG_TRY block here, so be careful not to throw error
 	 * without releasing the Jresult.
 	 */
-	res = jq_exec_prepared(fmstate->conn,
+	res = jq_exec_update_prepared(fmstate->conn,
 						   NULL,
 						   NULL,
 						   0,
@@ -3588,14 +3588,16 @@ jdbc_exec_update(PG_FUNCTION_ARGS)
 Datum
 jdbc_exec_params(PG_FUNCTION_ARGS)
 {
-	Jresult    *res = NULL;
+	Jconn	*conn  = NULL;
+	Jresult *res   = NULL;
 	TupleDesc  tupleDescriptor;
-	char  *server_name	    = NULL;
+	int resultSetID = 0;
+	char  *server_name = NULL;
+	char  *query     = NULL;
 	int   n_args = 0;
 	int   bindnum = 0;
 	int   i_arg  = 0;
 	bool  is_null;
-	jdbcFdwModifyState state;
 	Oid type;
 	Datum value;
 
@@ -3605,8 +3607,8 @@ jdbc_exec_params(PG_FUNCTION_ARGS)
 		if (n_args >= 2)
 		{
 			server_name = text_to_cstring(PG_GETARG_TEXT_PP(0));
-			state.query = PG_ARGISNULL(1) ? NULL : text_to_cstring(PG_GETARG_TEXT_PP(1));
-			state.conn = jdbc_get_conn_by_server_name(server_name);
+			query = PG_ARGISNULL(1) ? NULL : text_to_cstring(PG_GETARG_TEXT_PP(1));
+			conn = jdbc_get_conn_by_server_name(server_name);
 			state.p_nums = n_args - 2;
 		}
 		else
@@ -3615,7 +3617,7 @@ jdbc_exec_params(PG_FUNCTION_ARGS)
 			elog(ERROR, "jdbc_fdw: wrong number of arguments");
 		}
 
-		if (!state.conn)
+		if (!conn)
 		{
 			ereport(ERROR,
 					(errcode(ERRCODE_CONNECTION_DOES_NOT_EXIST),
@@ -3624,29 +3626,35 @@ jdbc_exec_params(PG_FUNCTION_ARGS)
 
 		prepTuplestoreResult(fcinfo);
 
-		jdbc_prepare_foreign_modify(&state);
+		res = jq_prepare(conn,
+					 query,
+					 NULL,
+					 &resultSetID);
+
+		if (*res != PGRES_COMMAND_OK)
+			jdbc_fdw_report_error(ERROR, res, conn, true, query);
+
 		bindnum = 0;
 		for (i_arg = 2; i_arg < n_args; i_arg++, bindnum++)
 		{
 			type = get_fn_expr_argtype(fcinfo->flinfo, i_arg);
 			is_null = PG_ARGISNULL(i_arg);
 			value = is_null ? (Datum) 0 : PG_GETARG_DATUM(i_arg);
-			jq_bind_sql_var(state.conn, type, bindnum, value, &is_null, state.resultSetID);
+			jq_bind_sql_var(conn, type, bindnum, value, &is_null, resultSetID);
 		}
-		res = jq_exec_prepared(state.conn,
+		res = jq_exeec_query_prepared(conn,
 					NULL,
 					NULL,
 					0,
-					state.resultSetID);
+					resultSetID);
+
 		if (*res != PGRES_COMMAND_OK)
-		{
-			jdbc_fdw_report_error(ERROR, res, state.conn, true, state.query);
-		}
+			jdbc_fdw_report_error(ERROR, res, conn, true, query);
 
 		/* Create temp descriptor */
-		tupleDescriptor = jdbc_create_descriptor(state.conn, &state.resultSetID);
+		tupleDescriptor = jdbc_create_descriptor(conn, &resultSetID);
 
-		jq_iterate_all_row(fcinfo, state.conn, tupleDescriptor, state.resultSetID);
+		jq_iterate_all_row(fcinfo, conn, tupleDescriptor, resultSetID);
 
 	}
 	PG_FINALLY();
@@ -3654,13 +3662,13 @@ jdbc_exec_params(PG_FUNCTION_ARGS)
 		if (res)
 			jq_clear(res);
 
-		if (state.resultSetID != 0)
-			jq_release_resultset_id(state.conn, state.resultSetID);
+		if (resultSetID != 0)
+			jq_release_resultset_id(conn, resultSetID);
 
 		tuplestore_donestoring((ReturnSetInfo *) fcinfo->resultinfo->setResult);
 
-		if (state.conn)
-			jdbc_release_connection(state.conn);
+		if (conn)
+			jdbc_release_connection(conn);
 	}
 	PG_END_TRY();
 	return (Datum) 0;
@@ -3669,14 +3677,16 @@ jdbc_exec_params(PG_FUNCTION_ARGS)
 Datum
 jdbc_exec_update_params(PG_FUNCTION_ARGS)
 {
-	Jresult    *res = NULL;
-	char  *server_name	    = NULL;
+	Jconn	*conn  = NULL;
+	Jresult *res   = NULL;
+	char  *server_name = NULL;
+	chat  *command = NULL;
+	int resultSetID  = 0;
 	int	  affected_rows    = 0;
 	int   n_args = 0;
 	int   bindnum = 0;
 	int   i_arg  = 0;
 	bool  is_null;
-	jdbcFdwModifyState state;
 	Oid type;
 	Datum value;
 
@@ -3686,8 +3696,8 @@ jdbc_exec_update_params(PG_FUNCTION_ARGS)
 		if (n_args >= 2)
 		{
 			server_name = text_to_cstring(PG_GETARG_TEXT_PP(0));
-			state.query = PG_ARGISNULL(1) ? NULL : text_to_cstring(PG_GETARG_TEXT_PP(1));
-			state.conn = jdbc_get_conn_by_server_name(server_name);
+			command = PG_ARGISNULL(1) ? NULL : text_to_cstring(PG_GETARG_TEXT_PP(1));
+			conn = jdbc_get_conn_by_server_name(server_name);
 			state.p_nums = n_args - 2;
 		}
 		else
@@ -3696,31 +3706,39 @@ jdbc_exec_update_params(PG_FUNCTION_ARGS)
 			elog(ERROR, "jdbc_fdw: wrong number of arguments");
 		}
 
-		if (!state.conn)
+		if (!conn)
 		{
 			ereport(ERROR,
 					(errcode(ERRCODE_CONNECTION_DOES_NOT_EXIST),
 					errmsg("jdbc_fdw: server \"%s\" not available", server_name)));
 		}
-		jdbc_prepare_foreign_modify(&state);
+
+		res = jq_prepare(sconn,
+					 command,
+					 NULL,
+					 &resultSetID);
+
+		if (*res != PGRES_COMMAND_OK)
+			jdbc_fdw_report_error(ERROR, res, conn, true, command);
+
 		bindnum = 0;
 		for (i_arg = 2; i_arg < n_args; i_arg++, bindnum++)
 		{
 			type = get_fn_expr_argtype(fcinfo->flinfo, i_arg);
 			is_null = PG_ARGISNULL(i_arg);
 			value = is_null ? (Datum) 0 : PG_GETARG_DATUM(i_arg);
-			jq_bind_sql_var(state.conn, type, bindnum, value, &is_null, state.resultSetID);
+			jq_bind_sql_var(conn, type, bindnum, value, &is_null, resultSetID);
 		}
-		res = jq_exec_prepared(state.conn,
+		res = jq_exec_update_prepared(conn,
 							NULL,
 							NULL,
 							0,
-							state.resultSetID);
+							resultSetID);
+
 		if (*res != PGRES_COMMAND_OK)
-		{
-			jdbc_fdw_report_error(ERROR, res, state.conn, true, state.query);
-		}
-		affected_rows = jq_get_number_of_affected_rows(state.conn, state.resultSetID);
+			jdbc_fdw_report_error(ERROR, res, conn, true, command);
+
+		affected_rows = jq_get_number_of_affected_rows(conn, resultSetID);
 		PG_RETURN_INT32(affected_rows);
 	}
 	PG_FINALLY();
@@ -3728,11 +3746,11 @@ jdbc_exec_update_params(PG_FUNCTION_ARGS)
 		if (res)
 			jq_clear(res);
 
-		if (state.resultSetID != 0)
-			jq_release_resultset_id(state.conn, state.resultSetID);
+		if (resultSetID != 0)
+			jq_release_resultset_id(conn, resultSetID);
 
-		if (state.conn)
-			jdbc_release_connection(state.conn);
+		if (conn)
+			jdbc_release_connection(conn);
 	}
 	PG_END_TRY();
 	return (Datum) 0;

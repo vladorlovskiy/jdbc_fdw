@@ -854,29 +854,29 @@ jq_iterate_all_row(FunctionCallInfo fcinfo, Jconn * conn, TupleDesc tupleDescrip
 
 
 Jresult *
-jq_exec_prepared(Jconn * conn, const int *paramLengths,
+jq_exec_update_prepared(Jconn * conn, const int *paramLengths,
 				 const int *paramFormats, int resultFormat, int resultSetID)
 {
-	jmethodID	idExecPreparedStatement;
+	jmethodID	method;
 	jclass		JDBCUtilsClass;
 	jobject		JDBCUtilsObject;
 	Jresult    *res;
 
-	ereport(DEBUG3, (errmsg("In jq_exec_prepared")));
+	ereport(DEBUG3, (errmsg("In jq_exec_update_prepared")));
 
 	jq_get_JDBCUtils(conn, &JDBCUtilsClass, &JDBCUtilsObject);
 
 	res = (Jresult *) palloc0(sizeof(Jresult));
 	*res = PGRES_FATAL_ERROR;
 
-	idExecPreparedStatement = (*Jenv)->GetMethodID(Jenv, JDBCUtilsClass, "execPreparedStatement",
+	method = (*Jenv)->GetMethodID(Jenv, JDBCUtilsClass, "execUpdatePreparedStatement",
 												   "(I)V");
-	if (idExecPreparedStatement == NULL)
+	if (method == NULL)
 	{
-		ereport(ERROR, (errmsg("Failed to find the JDBCUtils.execPreparedStatement method!")));
+		ereport(ERROR, (errmsg("Failed to find the JDBCUtils.execUpdatePreparedStatement method!")));
 	}
 	jq_exception_clear();
-	(*Jenv)->CallObjectMethod(Jenv, conn->JDBCUtilsObject, idExecPreparedStatement, resultSetID);
+	(*Jenv)->CallVoidMethod(Jenv, conn->JDBCUtilsObject, method, resultSetID);
 	jq_get_exception();
 
 	/* Return Java memory */
@@ -884,6 +884,40 @@ jq_exec_prepared(Jconn * conn, const int *paramLengths,
 
 	return res;
 }
+
+
+Jresult *
+jq_exec_query_prepared(Jconn * conn, int resultSetID)
+{
+	jmethodID	method;
+	jclass		JDBCUtilsClass;
+	jobject		JDBCUtilsObject;
+	Jresult    *res;
+
+	ereport(DEBUG3, (errmsg("In jq_exec_query_prepared")));
+
+	jq_get_JDBCUtils(conn, &JDBCUtilsClass, &JDBCUtilsObject);
+
+	res = (Jresult *) palloc0(sizeof(Jresult));
+	*res = PGRES_FATAL_ERROR;
+
+	method = (*Jenv)->GetMethodID(Jenv, JDBCUtilsClass, "execQueryPreparedStatement",
+												   "(I)V");
+	if (method == NULL)
+	{
+		ereport(ERROR, (errmsg("Failed to find the JDBCUtils.execQueryPreparedStatement method!")));
+	}
+	jq_exception_clear();
+	(*Jenv)->CallVoidMethod(Jenv, conn->JDBCUtilsObject, method, resultSetID);
+	jq_get_exception();
+
+	/* Return Java memory */
+	*res = PGRES_COMMAND_OK;
+
+	return res;
+}
+
+
 
 int jq_get_number_of_affected_rows(Jconn * conn, int resultSetID)
 {
