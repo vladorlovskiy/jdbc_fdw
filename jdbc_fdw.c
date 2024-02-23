@@ -3641,7 +3641,7 @@ jdbc_exec_params(PG_FUNCTION_ARGS)
 			value = is_null ? (Datum) 0 : PG_GETARG_DATUM(i_arg);
 			jq_bind_sql_var(conn, type, bindnum, value, &is_null, resultSetID);
 		}
-		res = jq_exeec_query_prepared(conn,	resultSetID);
+		res = jq_exec_query_prepared(conn,	resultSetID);
 
 		if (*res != PGRES_COMMAND_OK)
 			jdbc_fdw_report_error(ERROR, res, conn, true, query);

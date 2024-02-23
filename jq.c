@@ -764,7 +764,7 @@ jq_iterate_all_row(FunctionCallInfo fcinfo, Jconn * conn, TupleDesc tupleDescrip
 	jobjectArray		rowArray;
 
 	Tuplestorestate	   *tupstore;
-	HeapTuple			tuple;
+	HeapTuple			tuple = NULL;
 
 	MemoryContext		oldcontext;
 
