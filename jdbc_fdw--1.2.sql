@@ -12,6 +12,11 @@ RETURNS setof record
 AS 'MODULE_PATHNAME','jdbc_exec'
 LANGUAGE C STRICT PARALLEL RESTRICTED;
 
+CREATE FUNCTION jdbc_exec_params (text, text, anyelement)
+RETURNS setof record
+AS 'MODULE_PATHNAME','jdbc_exec_params'
+LANGUAGE C STRICT PARALLEL RESTRICTED;
+
 CREATE FUNCTION jdbc_fdw_handler()
 RETURNS fdw_handler
 AS 'MODULE_PATHNAME'
