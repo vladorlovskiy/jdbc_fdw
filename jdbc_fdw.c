@@ -3609,7 +3609,6 @@ jdbc_exec_params(PG_FUNCTION_ARGS)
 			server_name = text_to_cstring(PG_GETARG_TEXT_PP(0));
 			query = PG_ARGISNULL(1) ? NULL : text_to_cstring(PG_GETARG_TEXT_PP(1));
 			conn = jdbc_get_conn_by_server_name(server_name);
-			state.p_nums = n_args - 2;
 		}
 		else
 		{
@@ -3680,7 +3679,7 @@ jdbc_exec_update_params(PG_FUNCTION_ARGS)
 	Jconn	*conn  = NULL;
 	Jresult *res   = NULL;
 	char  *server_name = NULL;
-	chat  *command = NULL;
+	char  *command = NULL;
 	int resultSetID  = 0;
 	int	  affected_rows    = 0;
 	int   n_args = 0;
@@ -3698,7 +3697,6 @@ jdbc_exec_update_params(PG_FUNCTION_ARGS)
 			server_name = text_to_cstring(PG_GETARG_TEXT_PP(0));
 			command = PG_ARGISNULL(1) ? NULL : text_to_cstring(PG_GETARG_TEXT_PP(1));
 			conn = jdbc_get_conn_by_server_name(server_name);
-			state.p_nums = n_args - 2;
 		}
 		else
 		{
