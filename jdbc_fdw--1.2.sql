@@ -12,6 +12,11 @@ RETURNS setof record
 AS 'MODULE_PATHNAME','jdbc_exec'
 LANGUAGE C STRICT PARALLEL RESTRICTED;
 
+CREATE FUNCTION jdbc_exec_params (text, text, anyelement)
+RETURNS setof record
+AS 'MODULE_PATHNAME','jdbc_exec_params'
+LANGUAGE C STRICT PARALLEL RESTRICTED;
+
 CREATE FUNCTION jdbc_fdw_handler()
 RETURNS fdw_handler
 AS 'MODULE_PATHNAME'
@@ -111,6 +116,10 @@ RETURNS pg_catalog.bool STRICT
 AS 'MODULE_PATHNAME' LANGUAGE C;
 
 CREATE OR REPLACE FUNCTION jdbc_exec_update(text, text)
+RETURNS pg_catalog.int4 STRICT
+AS 'MODULE_PATHNAME' LANGUAGE C;
+
+CREATE OR REPLACE FUNCTION jdbc_exec_update_params(text, text, anyelement)
 RETURNS pg_catalog.int4 STRICT
 AS 'MODULE_PATHNAME' LANGUAGE C;
 

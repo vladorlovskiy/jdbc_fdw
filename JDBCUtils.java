@@ -203,7 +203,7 @@ public class JDBCUtils {
   public int createPreparedStatement(String query) throws Exception {
     try {
       checkConnExist();
-      PreparedStatement tmpPstmt = (PreparedStatement) conn.prepareStatement(query);
+      PreparedStatement tmpPstmt = (PreparedStatement) conn.prepareStatement(query, ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY);
       if (queryTimeoutValue != 0) {
         tmpPstmt.setQueryTimeout(queryTimeoutValue);
       }
@@ -223,10 +223,10 @@ public class JDBCUtils {
   }
 
   /*
-   * execPreparedStatement
-   *      Create a PreparedStatement object based on the query
+   * execUpdatePreparedStatement
+   *      Create a execUpdatePreparedStatement object based on the command
    */
-  public void execPreparedStatement(int resultSetID) throws SQLException {
+  public void execUpdatePreparedStatement(int resultSetID) throws SQLException {
     try {
       checkConnExist();
       PreparedStatement tmpPstmt = resultSetInfoMap.get(resultSetID).getPstmt();
@@ -236,6 +236,31 @@ public class JDBCUtils {
 
       resultSetInfoMap.get(resultSetID).setPstmt(tmpPstmt);
       resultSetInfoMap.get(resultSetID).setNumberOfAffectedRows(tmpNumberOfAffectedRows);
+    } catch (Throwable e) {
+      if (withStackTrace) {
+        e.printStackTrace(exceptionPrintWriter);
+        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      }
+      throw e;
+    }
+  }
+
+  /*
+   * execQueryPreparedStatement
+   *      Create a execUpdatePreparedStatement object based on the command
+   */
+  public void execQueryPreparedStatement(int resultSetID) throws SQLException {
+    try {
+      checkConnExist();
+      PreparedStatement pstmt = resultSetInfoMap.get(resultSetID).getPstmt();
+      checkPstmt(pstmt);
+      ResultSet resultSet = pstmt.executeQuery();
+      ResultSetMetaData rsMetaData = resultSet.getMetaData();
+      int numberOfColumns = rsMetaData.getColumnCount();
+      resultSetInfo next = new resultSetInfo(resultSet, numberOfColumns);
+      next.setNumberOfAffectedRows(pstmt.getUpdateCount());
+      next.setPstmt(pstmt);
+      resultSetInfoMap.put(resultSetID, next);
     } catch (Throwable e) {
       if (withStackTrace) {
         e.printStackTrace(exceptionPrintWriter);
@@ -1165,19 +1190,19 @@ public class JDBCUtils {
    */
   synchronized public int initResultSetKey() throws Exception{
     try{
-      int datum = this.resultSetKey;
-      while (resultSetInfoMap.containsKey(this.resultSetKey)) {
+      int datum = resultSetKey;
+      while (resultSetInfoMap.containsKey(resultSetKey)) {
         /* avoid giving minus key */
-        if (this.resultSetKey == Integer.MAX_VALUE) {
-          this.resultSetKey = 1;
+        if (resultSetKey == Integer.MAX_VALUE) {
+          resultSetKey = 1;
         }
-        this.resultSetKey++;
+        resultSetKey++;
         /* resultSetKey full */
-        if (this.resultSetKey == datum) {
+        if (resultSetKey == datum) {
           throw new SQLException("resultSetKey is full");
         }
       }
-      return this.resultSetKey;
+      return resultSetKey;
     } catch (Throwable e) {
       if (withStackTrace) {
         e.printStackTrace(exceptionPrintWriter);
