@@ -26,8 +26,14 @@
 #include "miscadmin.h"
 #include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
-#include "optimizer/cost.h"
 #include "optimizer/appendinfo.h"
+#include "optimizer/cost.h"
+#if (PG_VERSION_NUM >= 130010 && PG_VERSION_NUM < 140000) || \
+	(PG_VERSION_NUM >= 140007 && PG_VERSION_NUM < 150000) || \
+	(PG_VERSION_NUM >= 150002 && PG_VERSION_NUM < 160000) || \
+	(PG_VERSION_NUM >= 160000)
+#include "optimizer/inherit.h"
+#endif
 #include "optimizer/pathnode.h"
 #include "optimizer/paths.h"
 #include "optimizer/planmain.h"
@@ -36,6 +42,7 @@
 #include "optimizer/restrictinfo.h"
 #include "optimizer/tlist.h"
 #include "parser/parsetree.h"
+#include "parser/parse_relation.h"
 #include "utils/builtins.h"
 #include "utils/guc.h"
 #include "utils/lsyscache.h"
@@ -688,8 +695,12 @@ jdbcGetForeignRelSize(PlannerInfo *root,
 {
 	jdbcFdwRelationInfo *fpinfo;
 	ListCell   *lc;
+#if PG_VERSION_NUM < 160000
 	RangeTblEntry *rte = planner_rt_fetch(baserel->relid, root);
 	Oid			userid = rte->checkAsUser ? rte->checkAsUser : GetUserId();
+#else
+	Oid			userid = OidIsValid(baserel->userid) ? baserel->userid : GetUserId();
+#endif
 	Jconn	   *conn;
 
 	/* TODO: remove this functionality and support for remote statistics */
@@ -1255,9 +1266,19 @@ jdbcBeginForeignScan(ForeignScanState *node, int eflags)
 	if (fsplan->scan.scanrelid > 0)
 		rtindex = fsplan->scan.scanrelid;
 	else
+#if PG_VERSION_NUM < 160000
 		rtindex = bms_next_member(fsplan->fs_relids, -1);
+#else
+		rtindex = bms_next_member(fsplan->fs_base_relids, -1);
+#endif
+
 	rte = rt_fetch(rtindex, estate->es_range_table);
+
+#if PG_VERSION_NUM < 160000
 	userid = rte->checkAsUser ? rte->checkAsUser : GetUserId();
+#else
+	userid = OidIsValid(fsplan->checkAsUser) ? fsplan->checkAsUser : GetUserId();
+#endif
 
 	/* Get info about foreign table. */
 	fsstate->rel = node->ss.ss_currentRelation;
@@ -1574,7 +1595,18 @@ jdbcPlanForeignModify(PlannerInfo *root,
 	tupdesc = RelationGetDescr(rel);
 	table = GetForeignTable(foreignTableId);
 	server = GetForeignServer(table->serverid);
+#if PG_VERSION_NUM < 160000
 	userid = rte->checkAsUser ? rte->checkAsUser : GetUserId();
+#else
+	if (rte->perminfoindex != 0)
+	{
+		RTEPermissionInfo *perminfo = getRTEPermissionInfo(root->parse->rteperminfos, rte);
+
+		userid = (perminfo != NULL && OidIsValid(perminfo->checkAsUser))? perminfo->checkAsUser : GetUserId();
+	}
+	else
+		userid = GetUserId();
+#endif
 	user = GetUserMapping(userid, server->serverid);
 	conn = jdbc_get_connection(server, user, false);
 
@@ -1599,20 +1631,29 @@ jdbcPlanForeignModify(PlannerInfo *root,
 	}
 	else if (operation == CMD_UPDATE)
 	{
-		Bitmapset  *tmpset;
+		Bitmapset  *allUpdatedCols;
 		AttrNumber	col;
+#if (PG_VERSION_NUM >= 130010 && PG_VERSION_NUM < 140000) || \
+	(PG_VERSION_NUM >= 140007 && PG_VERSION_NUM < 150000) || \
+	(PG_VERSION_NUM >= 150002 && PG_VERSION_NUM < 160000) || \
+	(PG_VERSION_NUM >= 160000)
+		RelOptInfo *rel = find_base_rel(root, resultRelation);
 
-#if (PG_VERSION_NUM >= 120000)
-		tmpset = bms_union(rte->updatedCols, rte->extraUpdatedCols);
+		/* get_rel_all_updated_cols is supported from pg 13.10, 14.7, 15.2 and 16 */
+		allUpdatedCols = get_rel_all_updated_cols(root, rel);
+		col = -1;
+		while ((col = bms_next_member(allUpdatedCols, col)) >= 0)
 #else
-		tmpset = bms_copy(rte->updatedCols);
+		allUpdatedCols = bms_union(rte->updatedCols, rte->extraUpdatedCols);
+		while ((col = bms_first_member(allUpdatedCols)) >= 0)
 #endif
-		while ((col = bms_first_member(tmpset)) >= 0)
 		{
-			col += FirstLowInvalidHeapAttributeNumber;
-			if (col <= InvalidAttrNumber)	/* shouldn't happen */
+			/* bit numbers are offset by FirstLowInvalidHeapAttributeNumber */
+			AttrNumber	attno = col + FirstLowInvalidHeapAttributeNumber;
+
+			if (attno <= InvalidAttrNumber)	/* shouldn't happen */
 				elog(ERROR, "system-column update is not supported");
-			targetAttrs = lappend_int(targetAttrs, col);
+			targetAttrs = lappend_int(targetAttrs, attno);
 		}
 	}
 
@@ -1704,7 +1745,9 @@ jdbcBeginForeignModify(ModifyTableState *mtstate,
 	Oid			typefnoid = InvalidOid;
 	bool		isvarlena = false;
 	ListCell   *lc;
+#if PG_VERSION_NUM < 160000
 	RangeTblEntry *rte;
+#endif
 	Oid			userid;
 	ForeignServer *server;
 	UserMapping *user;
@@ -1722,12 +1765,17 @@ jdbcBeginForeignModify(ModifyTableState *mtstate,
 	if (eflags & EXEC_FLAG_EXPLAIN_ONLY)
 		return;
 
+#if PG_VERSION_NUM < 160000
 	/*
 	 * Identify which user to do the remote access as.  This should match what
 	 * ExecCheckRTEPerms() does.
 	 */
 	rte = rt_fetch(resultRelInfo->ri_RangeTableIndex, estate->es_range_table);
 	userid = rte->checkAsUser ? rte->checkAsUser : GetUserId();
+#else
+	/* Identify which user to do the remote access as. */
+	userid = ExecGetResultRelCheckAsUser(resultRelInfo, estate);
+#endif
 
 	foreignTableId = RelationGetRelid(rel);
 #if (PG_VERSION_NUM >= 140000)
