@@ -647,7 +647,7 @@ jq_release_resultset_id(Jconn * conn, int resultSetID)
 		ereport(ERROR, (errmsg("Failed to find the JDBCUtils.clearResultSetID method!")));
 	}
 	jq_exception_clear();
-	(*Jenv)->CallObjectMethod(Jenv, conn->JDBCUtilsObject, idClearResultSetID, resultSetID);
+	(*Jenv)->CallVoidMethod(Jenv, conn->JDBCUtilsObject, idClearResultSetID, resultSetID);
 	jq_get_exception();
 
 	return NULL;
@@ -937,6 +937,7 @@ int jq_get_number_of_affected_rows(Jconn * conn, int resultSetID)
 	}
 	jq_exception_clear();
 	numberOfRows = (int) (*Jenv)->CallIntMethod(Jenv, conn->JDBCUtilsObject, method, resultSetID);
+	ereport(DEBUG3, (errmsg("jq_get_number_of_affected_rows=%d",numberOfRows)));
 	jq_get_exception();
 	return numberOfRows;
 }
