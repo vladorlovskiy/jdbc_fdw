@@ -183,7 +183,31 @@ public class JDBCUtils {
   public void clearResultSetID(int resultSetID) throws SQLException {
     try {
       checkConnExist();
-      resultSetInfoMap.remove(resultSetID);
+      resultSetInfo info = resultSetInfoMap.remove(resultSetID);
+      if (info != null) {
+        ResultSet resultSet = info.getResultSet();
+        if (resultSet != null && !resultSet.isClosed()) {
+          Statement statement = resultSet.getStatement();
+          try {
+            resultSet.close();
+          } catch (Throwable e) {
+            if (withStackTrace) {
+              e.printStackTrace(exceptionPrintWriter);
+              throw new RuntimeException(exceptionStringWriter.toString(), e);
+            }
+          }
+          if (statement != null && !statement.isClosed()) {
+            try {
+              statement.close();
+            } catch (Throwable e) {
+              if (withStackTrace) {
+                e.printStackTrace(exceptionPrintWriter);
+                throw new RuntimeException(exceptionStringWriter.toString(), e);
+              }
+            }
+          }
+        }
+      }
     } catch (Throwable e) {
       if (withStackTrace) {
         e.printStackTrace(exceptionPrintWriter);
