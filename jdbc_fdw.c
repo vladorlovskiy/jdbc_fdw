@@ -2048,10 +2048,13 @@ jdbcEndForeignModify(EState *estate,
 	{
 		fmstate->is_prepared = false;
 	}
-
-	/* Release remote connection */
-	jdbc_release_connection(fmstate->conn);
-	fmstate->conn = NULL;
+	if (fmstate->conn)
+	{
+		jq_release_resultset_id(fmstate->conn, fmstate->resultSetID);
+		/* Release remote connection */
+		jdbc_release_connection(fmstate->conn);
+		fmstate->conn = NULL;
+	}
 }
 
 /*

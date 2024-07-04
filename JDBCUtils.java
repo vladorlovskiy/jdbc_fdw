@@ -207,6 +207,17 @@ public class JDBCUtils {
             }
           }
         }
+        PreparedStatement statement = info.getPstmt();
+        if (statement != null && !statement.isClosed()) {
+          try {
+            statement.close();
+          } catch (Throwable e) {
+            if (withStackTrace) {
+              e.printStackTrace(exceptionPrintWriter);
+              throw new RuntimeException(exceptionStringWriter.toString(), e);
+            }
+          }
+        }
       }
     } catch (Throwable e) {
       if (withStackTrace) {
