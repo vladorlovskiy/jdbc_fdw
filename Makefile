@@ -19,21 +19,27 @@ SHLIB_LINK += -L$(LIBDIR) -ljvm
 
 UNAME = $(shell uname)
 
-TRGTS = JAVAFILES
-
 JAVA_SOURCES = \
 	net/snowflake/client/jdbc/SnowflakeConnection.java \
 	JDBCUtils.java \
 	JDBCDriverLoader.java \
- 
-PG_CPPFLAGS=-D'PKG_LIB_DIR=$(pkglibdir)' -I$(libpq_srcdir)
+	JDBCConnection.java \
+	resultSetInfo.java
 
-JFLAGS = -d $(pkglibdir)
+# Generate a list of .class files corresponding to .java files
+JAVA_CLASSES = $(patsubst %.java,%.class,$(JAVA_SOURCES))
 
-all:$(TRGTS)
+PG_CPPFLAGS=-D'SHARE_EXT_DIR=$(datadir)/extension' -I$(libpq_srcdir)
 
-JAVAFILES:
-	javac $(JFLAGS) $(JAVA_SOURCES)
+# Target to compile all Java source files
+all:$(JAVA_CLASSES)
+
+# Rules for compiling each .java file into a .class
+%.class: %.java
+	javac $<
+
+# Use DATA_built to install .class files
+DATA_built = $(JAVA_CLASSES)
 
 # the db name is hard-coded in the tests
 override USE_MODULE_DB =

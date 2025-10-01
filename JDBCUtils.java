@@ -18,7 +18,6 @@
  */
 
 import java.io.*;
-import java.net.URL;
 import java.sql.*;
 import java.time.LocalTime;
 import java.time.Instant;
@@ -28,16 +27,9 @@ import java.util.*;
 import java.util.concurrent.*;
 import net.snowflake.client.jdbc.SnowflakeConnection;
 public class JDBCUtils {
-  private Connection conn = null;
-  private static JDBCDriverLoader jdbcDriverLoader;
-  private StringWriter exceptionStringWriter;
-  private PrintWriter exceptionPrintWriter;
-  private int queryTimeoutValue;
-  private Integer queryFetchSizeValue;
-  private boolean withStackTrace;
+  private JDBCConnection conn = null;
   private Statement tmpStmt;
   private PreparedStatement tmpPstmt;
-  private static ConcurrentHashMap<Integer, Connection> ConnectionHash = new ConcurrentHashMap<Integer, Connection>();
   private static int resultSetKey = 1;
   private static ConcurrentHashMap<Integer, resultSetInfo> resultSetInfoMap =
       new ConcurrentHashMap<Integer, resultSetInfo>();
@@ -52,61 +44,8 @@ public class JDBCUtils {
    *          3 - Password, 4 - Query timeout in seconds, 5 - jarfile
    *
    */
-  public void createConnection(int key, String[] options) throws Exception {
-    DatabaseMetaData dbMetadata;
-    Properties jdbcProperties;
-    Class jdbcDriverClass = null;
-    Driver jdbcDriver = null;
-    String driverClassName = options[0];
-    String url = options[1];
-    String userName = options[2];
-    String password = options[3];
-    String qTimeoutOpt = options[4];
-    String fileName = options[5];
-    String qFetchSizeOpt = options[6];
-    String qJdbcPropsOpt = options[7];
-    String errorMessageWithStackTraceOpt = options[8];
-
-    exceptionStringWriter = new StringWriter();
-    exceptionPrintWriter = new PrintWriter(exceptionStringWriter);
-
-    try {
-      queryTimeoutValue = Integer.parseInt(qTimeoutOpt);
-      queryFetchSizeValue = qFetchSizeOpt == null ? null : Integer.parseInt(qFetchSizeOpt);
-      withStackTrace = Boolean.valueOf(errorMessageWithStackTraceOpt);
-
-      File JarFile = new File(fileName);
-      String jarfile_path = JarFile.toURI().toURL().toString();
-      if (jdbcDriverLoader == null) {
-        /* If jdbcDriverLoader is being created. */
-        jdbcDriverLoader = new JDBCDriverLoader(new URL[] {JarFile.toURI().toURL()});
-      } else if (jdbcDriverLoader.CheckIfClassIsLoaded(driverClassName) == null) {
-        jdbcDriverLoader.addPath(jarfile_path);
-      }
-      jdbcDriverClass = jdbcDriverLoader.loadClass(driverClassName);
-      jdbcDriver = (Driver) jdbcDriverClass.newInstance();
-      jdbcProperties = new Properties();
-      if (qJdbcPropsOpt != null) {
-        jdbcProperties.loadFromXML(new ByteArrayInputStream(qJdbcPropsOpt.getBytes()));
-      }
-      if (userName != null) jdbcProperties.put("user", userName);
-      if (password != null) jdbcProperties.put("password", password);
-      /* get connection from cache */
-      if (ConnectionHash.containsKey(key)) {
-        conn = ConnectionHash.get(key);
-      }
-      if (conn == null) {
-        conn = jdbcDriver.connect(url, jdbcProperties);
-        ConnectionHash.put(key, conn);
-      }
-      dbMetadata = conn.getMetaData();
-    } catch (Throwable e) {
-      if (withStackTrace) {
-        e.printStackTrace(exceptionPrintWriter);
-        throw new RuntimeException(exceptionStringWriter.toString(), e);
-      }
-      throw e;
-    }
+  public void createConnection(int key, long server_hashvalue, long mapping_hashvalue, String[] options) throws Exception {
+    this.conn = JDBCConnection.getConnection(key, server_hashvalue, mapping_hashvalue, options);
   }
 
   /*
@@ -122,17 +61,10 @@ public class JDBCUtils {
     try {
       checkConnExist();
       tmpStmt = conn.createStatement(ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY);
-      if (queryTimeoutValue != 0) {
-        tmpStmt.setQueryTimeout(queryTimeoutValue);
-      }
-      if (queryFetchSizeValue != null) {
-        tmpStmt.setFetchSize(queryFetchSizeValue);
-      }
       tmpStmt.executeQuery(query);
     } catch (Throwable e) {
-      if (withStackTrace) {
-        e.printStackTrace(exceptionPrintWriter);
-        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      if (conn == null || conn.errorWithStackTrace()) {
+        throw new RuntimeException(JDBCConnection.stackTraceToString(e), e);
       }
       throw e;
     }
@@ -153,12 +85,6 @@ public class JDBCUtils {
     try {
       checkConnExist();
       tmpStmt = conn.createStatement(ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY);
-      if (queryTimeoutValue != 0) {
-        tmpStmt.setQueryTimeout(queryTimeoutValue);
-      }
-      if (queryFetchSizeValue != null) {
-        tmpStmt.setFetchSize(queryFetchSizeValue);
-      }
       tmpResultSet = tmpStmt.executeQuery(query);
       rSetMetadata = tmpResultSet.getMetaData();
       tmpNumberOfColumns = rSetMetadata.getColumnCount();
@@ -168,9 +94,8 @@ public class JDBCUtils {
           new resultSetInfo(tmpResultSet, tmpNumberOfColumns));
       return tmpResultSetKey;
     } catch (Throwable e) {
-      if (withStackTrace) {
-        e.printStackTrace(exceptionPrintWriter);
-        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      if (conn == null || conn.errorWithStackTrace()) {
+        throw new RuntimeException(JDBCConnection.stackTraceToString(e), e);
       }
       throw e;
     }
@@ -185,9 +110,8 @@ public class JDBCUtils {
       checkConnExist();
       resultSetInfoMap.remove(resultSetID);
     } catch (Throwable e) {
-      if (withStackTrace) {
-        e.printStackTrace(exceptionPrintWriter);
-        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      if (conn == null || conn.errorWithStackTrace()) {
+        throw new RuntimeException(JDBCConnection.stackTraceToString(e), e);
       }
       throw e;
     }
@@ -203,20 +127,13 @@ public class JDBCUtils {
   public int createPreparedStatement(String query) throws Exception {
     try {
       checkConnExist();
-      PreparedStatement tmpPstmt = (PreparedStatement) conn.prepareStatement(query, ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY);
-      if (queryTimeoutValue != 0) {
-        tmpPstmt.setQueryTimeout(queryTimeoutValue);
-      }
-      if (queryFetchSizeValue != null) {
-        tmpStmt.setFetchSize(queryFetchSizeValue);
-      }
+      PreparedStatement tmpPstmt = conn.prepareStatement(query, ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY);
       int tmpResultSetKey = initResultSetKey();
       resultSetInfoMap.put(tmpResultSetKey, new resultSetInfo(0, tmpPstmt));
       return tmpResultSetKey;
     } catch (Throwable e) {
-      if (withStackTrace) {
-        e.printStackTrace(exceptionPrintWriter);
-        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      if (conn == null || conn.errorWithStackTrace()) {
+        throw new RuntimeException(JDBCConnection.stackTraceToString(e), e);
       }
       throw e;
     }
@@ -237,9 +154,8 @@ public class JDBCUtils {
       resultSetInfoMap.get(resultSetID).setPstmt(tmpPstmt);
       resultSetInfoMap.get(resultSetID).setNumberOfAffectedRows(tmpNumberOfAffectedRows);
     } catch (Throwable e) {
-      if (withStackTrace) {
-        e.printStackTrace(exceptionPrintWriter);
-        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      if (conn == null || conn.errorWithStackTrace()) {
+        throw new RuntimeException(JDBCConnection.stackTraceToString(e), e);
       }
       throw e;
     }
@@ -262,9 +178,8 @@ public class JDBCUtils {
       next.setPstmt(pstmt);
       resultSetInfoMap.put(resultSetID, next);
     } catch (Throwable e) {
-      if (withStackTrace) {
-        e.printStackTrace(exceptionPrintWriter);
-        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      if (conn == null || conn.errorWithStackTrace()) {
+        throw new RuntimeException(JDBCConnection.stackTraceToString(e), e);
       }
       throw e;
     }
@@ -280,9 +195,8 @@ public class JDBCUtils {
     try {
       return resultSetInfoMap.get(resultSetID).getNumberOfColumns();
     } catch (Throwable e) {
-      if (withStackTrace) {
-        e.printStackTrace(exceptionPrintWriter);
-        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      if (conn == null || conn.errorWithStackTrace()) {
+        throw new RuntimeException(JDBCConnection.stackTraceToString(e), e);
       }
       throw e;
     }
@@ -298,9 +212,8 @@ public class JDBCUtils {
     try {
       return resultSetInfoMap.get(resultSetID).getNumberOfAffectedRows();
     } catch (Throwable e) {
-      if (withStackTrace) {
-        e.printStackTrace(exceptionPrintWriter);
-        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      if (conn == null || conn.errorWithStackTrace()) {
+        throw new RuntimeException(JDBCConnection.stackTraceToString(e), e);
       }
       throw e;
     }
@@ -316,6 +229,7 @@ public class JDBCUtils {
    */
   public Object[] getResultSet(int resultSetID) throws SQLException {
     int i = 0;
+    String previousExceptions = "";
     try {
       ResultSet tmpResultSet = resultSetInfoMap.get(resultSetID).getResultSet();
       int tmpNumberOfColumns = resultSetInfoMap.get(resultSetID).getNumberOfColumns();
@@ -382,16 +296,15 @@ public class JDBCUtils {
                 tmpResultSet.getStatement().close();
             }
           } catch(Throwable e) {
-            e.printStackTrace(exceptionPrintWriter);
+            previousExceptions += JDBCConnection.stackTraceToString(e);
           }
         }
         clearResultSetID(resultSetID);
         return null;
       }
     } catch (Throwable e) {
-      if (withStackTrace) {
-        e.printStackTrace(exceptionPrintWriter);
-        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      if (conn == null || conn.errorWithStackTrace()) {
+        throw new RuntimeException(JDBCConnection.stackTraceToString(e) + "\n" + previousExceptions, e);
       }
       throw e;
     }
@@ -513,9 +426,8 @@ public class JDBCUtils {
       }
       return tmpColumnTypesList;
     } catch (Throwable e) {
-      if (withStackTrace) {
-        e.printStackTrace(exceptionPrintWriter);
-        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      if (conn == null || conn.errorWithStackTrace()) {
+        throw new RuntimeException(JDBCConnection.stackTraceToString(e), e);
       }
       throw e;
     }
@@ -543,9 +455,8 @@ public class JDBCUtils {
       }
       return tmpColumnNames;
     } catch (Throwable e) {
-      if (withStackTrace) {
-        e.printStackTrace(exceptionPrintWriter);
-        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      if (conn == null || conn.errorWithStackTrace()) {
+        throw new RuntimeException(JDBCConnection.stackTraceToString(e), e);
       }
       throw e;
     }
@@ -584,9 +495,8 @@ public class JDBCUtils {
         );
       return tmpResultSetKey;
     } catch (Throwable e) {
-      if (withStackTrace) {
-        e.printStackTrace(exceptionPrintWriter);
-        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      if (conn == null || conn.errorWithStackTrace()) {
+        throw new RuntimeException(JDBCConnection.stackTraceToString(e), e);
       }
       throw e;
     }
@@ -639,9 +549,8 @@ public class JDBCUtils {
         );
       return tmpResultSetKey;
     } catch (Throwable e) {
-      if (withStackTrace) {
-        e.printStackTrace(exceptionPrintWriter);
-        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      if (conn == null || conn.errorWithStackTrace()) {
+        throw new RuntimeException(JDBCConnection.stackTraceToString(e), e);
       }
       throw e;
     }
@@ -667,9 +576,8 @@ public class JDBCUtils {
       }
       return tmpTableNames;
     } catch (Throwable e) {
-      if (withStackTrace) {
-        e.printStackTrace(exceptionPrintWriter);
-        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      if (conn == null || conn.errorWithStackTrace()) {
+        throw new RuntimeException(JDBCConnection.stackTraceToString(e), e);
       }
       throw e;
     }
@@ -694,9 +602,8 @@ public class JDBCUtils {
       }
       return tmpColumnNames;
     } catch (Throwable e) {
-      if (withStackTrace) {
-        e.printStackTrace(exceptionPrintWriter);
-        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      if (conn == null || conn.errorWithStackTrace()) {
+        throw new RuntimeException(JDBCConnection.stackTraceToString(e), e);
       }
       throw e;
     }
@@ -771,9 +678,8 @@ public class JDBCUtils {
       }
       return tmpColumnTypes;
     } catch (Throwable e) {
-      if (withStackTrace) {
-        e.printStackTrace(exceptionPrintWriter);
-        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      if (conn == null || conn.errorWithStackTrace()) {
+        throw new RuntimeException(JDBCConnection.stackTraceToString(e), e);
       }
       throw e;
     }
@@ -798,9 +704,8 @@ public class JDBCUtils {
       }
       return tmpPrimaryKey;
     } catch (Throwable e) {
-      if (withStackTrace) {
-        e.printStackTrace(exceptionPrintWriter);
-        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      if (conn == null || conn.errorWithStackTrace()) {
+        throw new RuntimeException(JDBCConnection.stackTraceToString(e), e);
       }
       throw e;
     }
@@ -812,6 +717,7 @@ public class JDBCUtils {
    *      open for another statement to be executed.
    */
   public void closeStatement() throws SQLException {
+    String previousExceptions = "";
     try {
       resultSetInfoMap.clear();
 
@@ -820,7 +726,7 @@ public class JDBCUtils {
           //TODO: Introduce a parameter for not tolerating the issue
           tmpStmt.close();
         } catch (Throwable e) {
-          e.printStackTrace(exceptionPrintWriter);
+          previousExceptions += JDBCConnection.stackTraceToString(e);
         }
         tmpStmt = null;
       }
@@ -829,39 +735,13 @@ public class JDBCUtils {
           //TODO: Introduce a parameter for not tolerating the issue
           tmpPstmt.close();
         } catch (Throwable e) {
-           e.printStackTrace(exceptionPrintWriter);
+           previousExceptions += JDBCConnection.stackTraceToString(e);
         }
         tmpPstmt = null;
       }
     } catch (Throwable e) {
-      if (withStackTrace) {
-        e.printStackTrace(exceptionPrintWriter);
-        throw new RuntimeException(exceptionStringWriter.toString(), e);
-      }
-      throw e;
-    }
-  }
-
-  /*
-   * closeConnection
-   *     Releases the resources used by connection.
-   */
-  public void closeConnection() throws SQLException {
-    try {
-      closeStatement();
-      if (conn != null) {
-        try {
-          //TODO: Introduce a parameter for not tolerating the issue
-          conn.close();
-        } catch (Throwable e) {
-          e.printStackTrace(exceptionPrintWriter);
-        }
-        conn = null;
-      }
-    } catch (Throwable e) {
-      if (withStackTrace) {
-        e.printStackTrace(exceptionPrintWriter);
-        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      if (conn == null || conn.errorWithStackTrace()) {
+        throw new RuntimeException(JDBCConnection.stackTraceToString(e) + "\n" + previousExceptions, e);
       }
       throw e;
     }
@@ -876,9 +756,8 @@ public class JDBCUtils {
     try {
       closeStatement();
     } catch (Throwable e) {
-      if (withStackTrace) {
-        e.printStackTrace(exceptionPrintWriter);
-        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      if (conn == null || conn.errorWithStackTrace()) {
+        throw new RuntimeException(JDBCConnection.stackTraceToString(e), e);
       }
       throw e;
     }
@@ -926,9 +805,8 @@ public class JDBCUtils {
       }
       resultSetInfoMap.get(resultSetID).setPstmt(tmpPstmt);
     } catch (Throwable e) {
-      if (withStackTrace) {
-        e.printStackTrace(exceptionPrintWriter);
-        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      if (conn == null || conn.errorWithStackTrace()) {
+        throw new RuntimeException(JDBCConnection.stackTraceToString(e), e);
       }
       throw e;
     }
@@ -948,9 +826,8 @@ public class JDBCUtils {
       tmpPstmt.setInt(attnum, values);
       resultSetInfoMap.get(resultSetID).setPstmt(tmpPstmt);
     } catch (Throwable e) {
-      if (withStackTrace) {
-        e.printStackTrace(exceptionPrintWriter);
-        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      if (conn == null || conn.errorWithStackTrace()) {
+        throw new RuntimeException(JDBCConnection.stackTraceToString(e), e);
       }
       throw e;
     }
@@ -970,9 +847,8 @@ public class JDBCUtils {
       tmpPstmt.setLong(attnum, values);
       resultSetInfoMap.get(resultSetID).setPstmt(tmpPstmt);
     } catch (Throwable e) {
-      if (withStackTrace) {
-        e.printStackTrace(exceptionPrintWriter);
-        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      if (conn == null || conn.errorWithStackTrace()) {
+        throw new RuntimeException(JDBCConnection.stackTraceToString(e), e);
       }
       throw e;
     }
@@ -992,9 +868,8 @@ public class JDBCUtils {
       tmpPstmt.setFloat(attnum, values);
       resultSetInfoMap.get(resultSetID).setPstmt(tmpPstmt);
     } catch (Throwable e) {
-      if (withStackTrace) {
-        e.printStackTrace(exceptionPrintWriter);
-        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      if (conn == null || conn.errorWithStackTrace()) {
+        throw new RuntimeException(JDBCConnection.stackTraceToString(e), e);
       }
       throw e;
     }
@@ -1014,9 +889,8 @@ public class JDBCUtils {
       tmpPstmt.setDouble(attnum, values);
       resultSetInfoMap.get(resultSetID).setPstmt(tmpPstmt);
     } catch (Throwable e) {
-      if (withStackTrace) {
-        e.printStackTrace(exceptionPrintWriter);
-        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      if (conn == null || conn.errorWithStackTrace()) {
+        throw new RuntimeException(JDBCConnection.stackTraceToString(e), e);
       }
       throw e;
     }
@@ -1036,9 +910,8 @@ public class JDBCUtils {
       tmpPstmt.setBoolean(attnum, values);
       resultSetInfoMap.get(resultSetID).setPstmt(tmpPstmt);
     } catch (Throwable e) {
-      if (withStackTrace) {
-        e.printStackTrace(exceptionPrintWriter);
-        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      if (conn == null || conn.errorWithStackTrace()) {
+        throw new RuntimeException(JDBCConnection.stackTraceToString(e), e);
       }
       throw e;
     }
@@ -1058,9 +931,8 @@ public class JDBCUtils {
       tmpPstmt.setString(attnum, values);
       resultSetInfoMap.get(resultSetID).setPstmt(tmpPstmt);
     } catch (Throwable e) {
-      if (withStackTrace) {
-        e.printStackTrace(exceptionPrintWriter);
-        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      if (conn == null || conn.errorWithStackTrace()) {
+        throw new RuntimeException(JDBCConnection.stackTraceToString(e), e);
       }
       throw e;
     }
@@ -1081,9 +953,8 @@ public class JDBCUtils {
       tmpPstmt.setBinaryStream(attnum, targetStream, length);
       resultSetInfoMap.get(resultSetID).setPstmt(tmpPstmt);
     } catch (Throwable e) {
-      if (withStackTrace) {
-        e.printStackTrace(exceptionPrintWriter);
-        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      if (conn == null || conn.errorWithStackTrace()) {
+        throw new RuntimeException(JDBCConnection.stackTraceToString(e), e);
       }
       throw e;
     }
@@ -1105,9 +976,8 @@ public class JDBCUtils {
       tmpPstmt.setObject(attnum, localTime);
       resultSetInfoMap.get(resultSetID).setPstmt(tmpPstmt);
     } catch (Throwable e) {
-      if (withStackTrace) {
-        e.printStackTrace(exceptionPrintWriter);
-        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      if (conn == null || conn.errorWithStackTrace()) {
+        throw new RuntimeException(JDBCConnection.stackTraceToString(e), e);
       }
       throw e;
     }
@@ -1131,9 +1001,8 @@ public class JDBCUtils {
       tmpPstmt.setObject(attnum, localTime);
       resultSetInfoMap.get(resultSetID).setPstmt(tmpPstmt);
     } catch (Throwable e) {
-      if (withStackTrace) {
-        e.printStackTrace(exceptionPrintWriter);
-        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      if (conn == null || conn.errorWithStackTrace()) {
+        throw new RuntimeException(JDBCConnection.stackTraceToString(e), e);
       }
       throw e;
     }
@@ -1154,10 +1023,9 @@ public class JDBCUtils {
         /* GridDB only, no calendar support in setTimestamp() */
         preparedStatement.setTimestamp(attnum, timestamp);
       } catch (Throwable e) {
-        if (withStackTrace) {
-          e.printStackTrace(exceptionPrintWriter);
-          throw new RuntimeException(exceptionStringWriter.toString(), e);
-        }
+        if (conn == null || conn.errorWithStackTrace()) {
+        throw new RuntimeException(JDBCConnection.stackTraceToString(e), e);
+      }
         throw e;
       }
     }
@@ -1177,9 +1045,29 @@ public class JDBCUtils {
       setTimestamp(tmpPstmt, attnum, timestamp);
       resultSetInfoMap.get(resultSetID).setPstmt(tmpPstmt);
     } catch (Throwable e) {
-      if (withStackTrace) {
-        e.printStackTrace(exceptionPrintWriter);
-        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      if (conn == null || conn.errorWithStackTrace()) {
+        throw new RuntimeException(JDBCConnection.stackTraceToString(e), e);
+      }
+      throw e;
+    }
+  }
+
+  /*
+   * bindDatePreparedStatement
+   *      Bind the value to the PreparedStatement object based on the query
+   */
+  public void bindDatePreparedStatement(String values, int attnum, int resultSetID)
+    throws SQLException {
+    try {
+      checkConnExist();
+      PreparedStatement tmpPstmt = resultSetInfoMap.get(resultSetID).getPstmt();
+      checkPstmt(tmpPstmt);
+      java.sql.Date date = java.sql.Date.valueOf(values);
+      tmpPstmt.setDate(attnum, date);
+      resultSetInfoMap.get(resultSetID).setPstmt(tmpPstmt);
+    } catch (Throwable e) {
+      if (conn == null || conn.errorWithStackTrace()) {
+        throw new RuntimeException(JDBCConnection.stackTraceToString(e), e);
       }
       throw e;
     }
@@ -1204,9 +1092,8 @@ public class JDBCUtils {
       }
       return resultSetKey;
     } catch (Throwable e) {
-      if (withStackTrace) {
-        e.printStackTrace(exceptionPrintWriter);
-        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      if (conn == null || conn.errorWithStackTrace()) {
+        throw new RuntimeException(JDBCConnection.stackTraceToString(e), e);
       }
       throw e;
     }
@@ -1221,9 +1108,8 @@ public class JDBCUtils {
       DatabaseMetaData md = conn.getMetaData();
       return md.getIdentifierQuoteString();
     } catch (Throwable e) {
-      if (withStackTrace) {
-        e.printStackTrace(exceptionPrintWriter);
-        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      if (conn == null || conn.errorWithStackTrace()) {
+        throw new RuntimeException(JDBCConnection.stackTraceToString(e), e);
       }
       throw e;
     }
@@ -1255,9 +1141,8 @@ public class JDBCUtils {
         );
       return tmpResultSetKey;
     } catch (Throwable e) {
-      if (withStackTrace) {
-        e.printStackTrace(exceptionPrintWriter);
-        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      if (conn == null || conn.errorWithStackTrace()) {
+        throw new RuntimeException(JDBCConnection.stackTraceToString(e), e);
       }
       throw e;
     }
@@ -1289,9 +1174,8 @@ public class JDBCUtils {
         );
       return tmpResultSetKey;
     } catch (Throwable e) {
-      if (withStackTrace) {
-        e.printStackTrace(exceptionPrintWriter);
-        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      if (conn == null || conn.errorWithStackTrace()) {
+        throw new RuntimeException(JDBCConnection.stackTraceToString(e), e);
       }
       throw e;
     }
@@ -1300,11 +1184,10 @@ public class JDBCUtils {
   public boolean getAutoCommit() throws Throwable {
     try {
       checkConnExist();
-      return conn.getAutoCommit();
+      return conn.getConnection().getAutoCommit();
     } catch (Throwable e) {
-      if (withStackTrace) {
-        e.printStackTrace(exceptionPrintWriter);
-        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      if (conn == null || conn.errorWithStackTrace()) {
+        throw new RuntimeException(JDBCConnection.stackTraceToString(e), e);
       }
       throw e;
     }
@@ -1312,11 +1195,10 @@ public class JDBCUtils {
   public void setAutoCommit(boolean flag) throws Throwable {
     try {
       checkConnExist();
-      conn.setAutoCommit(flag);
+      conn.getConnection().setAutoCommit(flag);
     } catch (Throwable e) {
-      if (withStackTrace) {
-        e.printStackTrace(exceptionPrintWriter);
-        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      if (conn == null || conn.errorWithStackTrace()) {
+        throw new RuntimeException(JDBCConnection.stackTraceToString(e), e);
       }
       throw e;
     }
@@ -1338,9 +1220,8 @@ public class JDBCUtils {
       DatabaseMetaData md = conn.getMetaData();
       return md.getDriverMajorVersion();
     } catch (Throwable e) {
-      if (withStackTrace) {
-        e.printStackTrace(exceptionPrintWriter);
-        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      if (conn == null || conn.errorWithStackTrace()) {
+        throw new RuntimeException(JDBCConnection.stackTraceToString(e), e);
       }
       throw e;
     }
@@ -1356,9 +1237,8 @@ public class JDBCUtils {
       DatabaseMetaData md = conn.getMetaData();
       return md.getDriverMinorVersion();
     } catch (Throwable e) {
-      if (withStackTrace) {
-        e.printStackTrace(exceptionPrintWriter);
-        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      if (conn == null || conn.errorWithStackTrace()) {
+        throw new RuntimeException(JDBCConnection.stackTraceToString(e), e);
       }
       throw e;
     }
@@ -1373,9 +1253,8 @@ public class JDBCUtils {
       DatabaseMetaData md = conn.getMetaData();
       return md.getDriverVersion();
     } catch (Throwable e) {
-      if (withStackTrace) {
-        e.printStackTrace(exceptionPrintWriter);
-        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      if (conn == null || conn.errorWithStackTrace()) {
+        throw new RuntimeException(JDBCConnection.stackTraceToString(e), e);
       }
       throw e;
     }
@@ -1391,9 +1270,8 @@ public class JDBCUtils {
       DatabaseMetaData md = conn.getMetaData();
       return md.getDriverName();
     } catch (Throwable e) {
-      if (withStackTrace) {
-        e.printStackTrace(exceptionPrintWriter);
-        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      if (conn == null || conn.errorWithStackTrace()) {
+        throw new RuntimeException(JDBCConnection.stackTraceToString(e), e);
       }
       throw e;
     }
@@ -1410,9 +1288,8 @@ public class JDBCUtils {
       DatabaseMetaData md = conn.getMetaData();
       return md.getDatabaseMajorVersion();
     } catch (Throwable e) {
-      if (withStackTrace) {
-        e.printStackTrace(exceptionPrintWriter);
-        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      if (conn == null || conn.errorWithStackTrace()) {
+        throw new RuntimeException(JDBCConnection.stackTraceToString(e), e);
       }
       throw e;
     }
@@ -1428,9 +1305,8 @@ public class JDBCUtils {
       DatabaseMetaData md = conn.getMetaData();
       return md.getDatabaseMinorVersion();
     } catch (Throwable e) {
-      if (withStackTrace) {
-        e.printStackTrace(exceptionPrintWriter);
-        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      if (conn == null || conn.errorWithStackTrace()) {
+        throw new RuntimeException(JDBCConnection.stackTraceToString(e), e);
       }
       throw e;
     }
@@ -1446,9 +1322,8 @@ public class JDBCUtils {
       DatabaseMetaData md = conn.getMetaData();
       return md.getDatabaseProductVersion();
     } catch (Throwable e) {
-      if (withStackTrace) {
-        e.printStackTrace(exceptionPrintWriter);
-        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      if (conn == null || conn.errorWithStackTrace()) {
+        throw new RuntimeException(JDBCConnection.stackTraceToString(e), e);
       }
       throw e;
     }
@@ -1464,9 +1339,8 @@ public class JDBCUtils {
       DatabaseMetaData md = conn.getMetaData();
       return md.getDatabaseProductName();
     } catch (Throwable e) {
-      if (withStackTrace) {
-        e.printStackTrace(exceptionPrintWriter);
-        throw new RuntimeException(exceptionStringWriter.toString(), e);
+     if (conn == null || conn.errorWithStackTrace()) {
+        throw new RuntimeException(JDBCConnection.stackTraceToString(e), e);
       }
       throw e;
     }
@@ -1477,9 +1351,8 @@ public class JDBCUtils {
       checkConnExist();
       return conn.createStatement().executeUpdate(sqlCommand);
     } catch (Throwable e) {
-      if (withStackTrace) {
-        e.printStackTrace(exceptionPrintWriter);
-        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      if (conn == null || conn.errorWithStackTrace()) {
+        throw new RuntimeException(JDBCConnection.stackTraceToString(e), e);
       }
       throw e;
     }
@@ -1489,15 +1362,35 @@ public class JDBCUtils {
     try {
       checkConnExist();
       try (InputStream idata = new ByteArrayInputStream(data.getBytes())) {
-        conn.unwrap(SnowflakeConnection.class).uploadStream(stageName, destPrefix, idata, fileName, compress);
+        conn.getConnection().unwrap(SnowflakeConnection.class).uploadStream(stageName, destPrefix, idata, fileName, compress);
       }
     } catch (Throwable e) {
-      if (withStackTrace) {
-        e.printStackTrace(exceptionPrintWriter);
-        throw new RuntimeException(exceptionStringWriter.toString(), e);
+      if (conn == null || conn.errorWithStackTrace()) {
+        throw new RuntimeException(JDBCConnection.stackTraceToString(e), e);
       }
       throw e;
     }
   }
 
+
+
+  /* finalize all actived connection */
+  public static void finalizeAllConns(long hashvalue) throws Exception {
+    JDBCConnection.finalizeAllConns(hashvalue);
+  }
+
+  /* finalize connection have given server_hashvalue */
+  public static void finalizeAllServerConns(long hashvalue) throws Exception {
+    JDBCConnection.finalizeAllServerConns(hashvalue);
+  }
+
+  /* finalize connection have given mapping_hashvalue */
+  public static void finalizeAllUserMapingConns(long hashvalue) throws Exception {
+    JDBCConnection.finalizeAllUserMapingConns(hashvalue);
+  }
+
+  /* finalize cached result set */
+  public static void finalizeAllResultSet() {
+    resultSetInfoMap.clear();
+  }
 }
